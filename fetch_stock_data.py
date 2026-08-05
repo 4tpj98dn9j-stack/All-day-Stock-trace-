@@ -1,4 +1,7 @@
-"""Fetch historical close price and volume for a ticker from Yahoo Finance and save to CSV.
+"""Fetch historical OHLCV data for a ticker from Yahoo Finance and save to CSV.
+
+Output columns match easyinvesting.app's CSV export: date,open,high,low,close,volume
+(split/dividend-adjusted, same convention Yahoo Finance uses).
 
 Usage:
     python fetch_stock_data.py --ticker AAPL --period 6mo
@@ -18,7 +21,7 @@ VALID_PERIODS = {
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Download close price/volume from Yahoo Finance")
+    parser = argparse.ArgumentParser(description="Download OHLCV data from Yahoo Finance")
     parser.add_argument("--ticker", help="Ticker symbol, e.g. AAPL")
     parser.add_argument(
         "--period",
@@ -33,13 +36,15 @@ def prompt_if_missing(value, prompt_text):
 
 
 def fetch_and_save(ticker, period, output_path):
-    data = yf.Ticker(ticker).history(period=period)
+    data = yf.Ticker(ticker).history(period=period, auto_adjust=True)
     if data.empty:
         print(f"No data returned for ticker '{ticker}' with period '{period}'.", file=sys.stderr)
         sys.exit(1)
 
-    result = data[["Close", "Volume"]].copy()
-    result.index.name = "Date"
+    result = data[["Open", "High", "Low", "Close", "Volume"]].copy()
+    result.index = result.index.strftime("%Y-%m-%d")
+    result.index.name = "date"
+    result.columns = ["open", "high", "low", "close", "volume"]
     result.to_csv(output_path)
     print(f"Saved {len(result)} rows to {output_path}")
 
