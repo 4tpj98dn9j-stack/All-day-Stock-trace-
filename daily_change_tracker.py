@@ -1,4 +1,4 @@
-"""Fetch today's closing price for a fixed watchlist and report day-over-day % change.
+"""Fetch today's OHLC for a fixed watchlist and report day-over-day close % change.
 
 Intended to be run once per trading day (e.g. via cron/Task Scheduler). Each run
 appends one row per ticker to daily_change_log.csv.
@@ -27,20 +27,20 @@ def parse_args():
 
 
 def get_change(ticker):
-    """Return (date, close, prev_close, pct_change) for the most recent two trading days."""
-    history = yf.Ticker(ticker).history(period="5d")
+    """Return latest day's OHLC plus prev close and pct_change, for the most recent two trading days."""
+    history = yf.Ticker(ticker).history(period="5d", auto_adjust=True)
     if history.empty:
         return None
 
-    closes = history["Close"].dropna()
-    if len(closes) < 2:
+    history = history.dropna(subset=["Close"])
+    if len(history) < 2:
         return None
 
-    latest_date = closes.index[-1].strftime("%Y-%m-%d")
-    latest_close = closes.iloc[-1]
-    prev_close = closes.iloc[-2]
-    pct_change = (latest_close - prev_close) / prev_close * 100
-    return latest_date, latest_close, prev_close, pct_change
+    latest = history.iloc[-1]
+    prev_close = history["Close"].iloc[-2]
+    pct_change = (latest["Close"] - prev_close) / prev_close * 100
+    latest_date = history.index[-1].strftime("%Y-%m-%d")
+    return latest_date, latest["Open"], latest["High"], latest["Low"], latest["Close"], prev_close, pct_change
 
 
 def main():
@@ -53,10 +53,13 @@ def main():
             print(f"[WARN] Could not get enough data for '{ticker}', skipping.", file=sys.stderr)
             continue
 
-        date, close, prev_close, pct_change = result
+        date, open_, high, low, close, prev_close, pct_change = result
         rows.append({
             "date": date,
             "ticker": ticker,
+            "open": round(open_, 2),
+            "high": round(high, 2),
+            "low": round(low, 2),
             "close": round(close, 2),
             "prev_close": round(prev_close, 2),
             "pct_change": round(pct_change, 2),
