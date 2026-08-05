@@ -13,6 +13,15 @@
   </header>
   <p id="updated-at"></p>
   <div id="cards" class="cards"></div>
+
+  <div id="modal-overlay" class="modal-overlay hidden">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <button id="modal-close" class="modal-close" aria-label="닫기">&times;</button>
+      <h2 id="modal-title"></h2>
+      <div id="modal-body"></div>
+    </div>
+  </div>
+
   <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>
