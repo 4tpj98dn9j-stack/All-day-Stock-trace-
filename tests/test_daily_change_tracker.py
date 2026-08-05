@@ -1,4 +1,5 @@
 import csv
+import os
 import unittest
 from unittest.mock import patch
 
@@ -35,6 +36,10 @@ class DailyChangeTrackerTests(unittest.TestCase):
 
     def test_main_writes_and_appends_csv(self):
         output_path = "/tmp/test_daily_change_log.csv"
+        try:
+            os.remove(output_path)
+        except FileNotFoundError:
+            pass
 
         def fake_ticker(symbol):
             class FakeTicker:
