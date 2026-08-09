@@ -162,6 +162,7 @@ class DashboardAppTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(data["symbol"], "^VIX")
         self.assertEqual(data["close"], 21.0)
+        self.assertEqual(data["options"]["status"], "ok")
         self.assertEqual(data["options"]["expiration"], "2026-08-15")
         self.assertEqual(len(data["options"]["calls"]), 5)
         self.assertEqual(len(data["options"]["puts"]), 3)
@@ -179,7 +180,7 @@ class DashboardAppTests(unittest.TestCase):
             data = response.get_json()
 
         self.assertEqual(response.status_code, 200)
-        self.assertIsNone(data["options"])
+        self.assertEqual(data["options"], {"status": "unavailable"})
 
     def test_index_detail_unknown_symbol_returns_404(self):
         response = self.client.get("/api/index/FAKE")
@@ -194,7 +195,15 @@ class DashboardAppTests(unittest.TestCase):
 
     def test_fetch_options_summary_handles_exceptions(self):
         with patch("app.yf.Ticker", side_effect=RuntimeError("network error")):
-            self.assertIsNone(app.fetch_options_summary("^VIX", 20.0))
+            self.assertEqual(app.fetch_options_summary("^VIX", 20.0), {"status": "error"})
+
+    def test_fetch_options_summary_handles_chain_lookup_exception(self):
+        mock_ticker = MagicMock()
+        mock_ticker.options = ["2026-08-15"]
+        mock_ticker.option_chain.side_effect = RuntimeError("rate limited")
+
+        with patch("app.yf.Ticker", return_value=mock_ticker):
+            self.assertEqual(app.fetch_options_summary("^VIX", 20.0), {"status": "error"})
 
 
 if __name__ == "__main__":
