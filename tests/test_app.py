@@ -135,6 +135,67 @@ class DashboardAppTests(unittest.TestCase):
         summary = app.build_market_summary(ixic_pct=0.01, ndx_pct=0.0, vix_pct=1.0)
         self.assertIn("보합", summary)
 
+    def test_index_detail_returns_ohlc_and_options(self):
+        fake_result = ("2026-08-05", 18.0, 22.0, 17.5, 21.0, 18.0, 16.67)
+        mock_ticker = MagicMock()
+        mock_ticker.options = ["2026-08-15"]
+        mock_chain = MagicMock()
+        mock_chain.calls = pd.DataFrame({
+            "strike": [19.0, 20.0, 21.0, 22.0, 23.0, 24.0],
+            "lastPrice": [2.1, 1.5, 1.0, 0.6, 0.3, 0.1],
+            "volume": [100, 200, 300, 150, 50, 10],
+            "openInterest": [500, 600, 700, 400, 200, 100],
+        })
+        mock_chain.puts = pd.DataFrame({
+            "strike": [19.0, 20.0, 21.0],
+            "lastPrice": [0.2, 0.5, 0.9],
+            "volume": [80, 90, 60],
+            "openInterest": [300, 350, 250],
+        })
+        mock_ticker.option_chain.return_value = mock_chain
+
+        with patch("app.get_change", return_value=fake_result), \
+             patch("app.yf.Ticker", return_value=mock_ticker):
+            response = self.client.get("/api/index/%5EVIX")
+            data = response.get_json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(data["symbol"], "^VIX")
+        self.assertEqual(data["close"], 21.0)
+        self.assertEqual(data["options"]["expiration"], "2026-08-15")
+        self.assertEqual(len(data["options"]["calls"]), 5)
+        self.assertEqual(len(data["options"]["puts"]), 3)
+        # nearest-to-price (21.0) strike should be first after sorting by strike
+        self.assertEqual(data["options"]["calls"][0]["strike"], 19.0)
+
+    def test_index_detail_handles_no_options(self):
+        fake_result = ("2026-08-05", 15000.0, 15100.0, 14900.0, 14950.0, 15100.0, -0.99)
+        mock_ticker = MagicMock()
+        mock_ticker.options = []
+
+        with patch("app.get_change", return_value=fake_result), \
+             patch("app.yf.Ticker", return_value=mock_ticker):
+            response = self.client.get("/api/index/%5EIXIC")
+            data = response.get_json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(data["options"])
+
+    def test_index_detail_unknown_symbol_returns_404(self):
+        response = self.client.get("/api/index/FAKE")
+        self.assertEqual(response.status_code, 404)
+
+    def test_index_detail_handles_missing_data(self):
+        with patch("app.get_change", return_value=None):
+            response = self.client.get("/api/index/%5EVIX")
+            data = response.get_json()
+
+        self.assertEqual(data["error"], "no data")
+
+    def test_fetch_options_summary_handles_exceptions(self):
+        with patch("app.yf.Ticker", side_effect=RuntimeError("network error")):
+            self.assertIsNone(app.fetch_options_summary("^VIX", 20.0))
+
 
 if __name__ == "__main__":
     unittest.main()

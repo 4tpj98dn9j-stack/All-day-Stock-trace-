@@ -5,6 +5,7 @@ Usage:
     (open http://localhost:5000)
 """
 
+import pandas as pd
 import yfinance as yf
 from flask import Flask, jsonify, render_template
 
@@ -113,6 +114,78 @@ def build_market_summary(ixic_pct, ndx_pct, vix_pct):
             vix_phrase = ", 변동성 완화"
 
     return f"나스닥 {direction} 마감, 기술주 전반 {tech_word}{vix_phrase}"
+
+
+@app.route("/api/index/<symbol>")
+def index_detail(symbol):
+    meta = next((m for m in INDICES if m["symbol"].lstrip("^").upper() == symbol.lstrip("^").upper()), None)
+    if meta is None:
+        return jsonify({"error": "unknown index"}), 404
+
+    try:
+        result = get_change(meta["symbol"])
+    except Exception:
+        result = None
+
+    if result is None:
+        return jsonify({"symbol": meta["symbol"], "name": meta["name"], "error": "no data"})
+
+    date, open_, high, low, close, prev_close, pct_change = result
+
+    return jsonify({
+        "symbol": meta["symbol"],
+        "name": meta["name"],
+        "date": date,
+        "open": round(open_, 2),
+        "high": round(high, 2),
+        "low": round(low, 2),
+        "close": round(close, 2),
+        "prev_close": round(prev_close, 2),
+        "change": round(close - prev_close, 2),
+        "change_pct": round(pct_change, 2),
+        "options": fetch_options_summary(meta["symbol"], close),
+    })
+
+
+def fetch_options_summary(symbol, current_price, strikes_per_side=5):
+    """Return the nearest-expiry option chain narrowed to strikes closest to current_price.
+
+    Many index tickers (e.g. raw ^IXIC/^NDX) have no listed options at all, so this
+    returns None whenever yfinance reports no expirations or the lookup fails.
+    """
+    try:
+        ticker = yf.Ticker(symbol)
+        expirations = ticker.options
+        if not expirations:
+            return None
+
+        nearest_expiry = expirations[0]
+        chain = ticker.option_chain(nearest_expiry)
+
+        return {
+            "expiration": nearest_expiry,
+            "calls": _nearest_strikes(chain.calls, current_price, strikes_per_side),
+            "puts": _nearest_strikes(chain.puts, current_price, strikes_per_side),
+        }
+    except Exception:
+        return None
+
+
+def _nearest_strikes(df, current_price, count):
+    if df is None or df.empty:
+        return []
+
+    nearest = df.assign(_diff=(df["strike"] - current_price).abs()).nsmallest(count, "_diff").sort_values("strike")
+
+    rows = []
+    for row in nearest.itertuples():
+        rows.append({
+            "strike": round(float(row.strike), 2),
+            "last_price": None if pd.isna(row.lastPrice) else round(float(row.lastPrice), 2),
+            "volume": None if pd.isna(row.volume) else int(row.volume),
+            "open_interest": None if pd.isna(row.openInterest) else int(row.openInterest),
+        })
+    return rows
 
 
 @app.route("/api/quote/<ticker>")

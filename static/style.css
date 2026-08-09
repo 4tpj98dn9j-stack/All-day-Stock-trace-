@@ -71,6 +71,7 @@ h1 {
   padding: 10px 12px;
   background: #f5f5f7;
   border-left: 3px solid #ccc;
+  cursor: pointer;
 }
 
 .index-chip.up {
@@ -256,6 +257,42 @@ h1 {
 .news-list .publisher {
   color: #999;
   font-size: 0.78rem;
+}
+
+.options-section h3 {
+  font-size: 0.95rem;
+  margin: 0 0 8px;
+}
+
+.options-subtitle {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #555;
+  margin: 12px 0 4px;
+}
+
+.options-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+  margin-bottom: 4px;
+}
+
+.options-table th,
+.options-table td {
+  padding: 4px 6px;
+  text-align: right;
+  border-bottom: 1px solid #eee;
+}
+
+.options-table th:first-child,
+.options-table td:first-child {
+  text-align: left;
+}
+
+.options-table .options-empty {
+  text-align: center;
+  color: #999;
 }
 
 @media (max-width: 480px) {

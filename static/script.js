@@ -43,6 +43,7 @@ async function loadMarketSummary() {
           <div class="index-price">${idx.price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
           <div class="index-change">${sign}${idx.change.toFixed(2)} (${sign}${idx.change_pct.toFixed(2)}%)</div>
         `;
+        chip.addEventListener("click", () => openIndexDetail(idx.symbol, idx.name));
       }
 
       indicesEl.appendChild(chip);
@@ -158,6 +159,73 @@ async function openDetail(ticker) {
         <div><div class="label">거래량</div><div class="value">${volumeText}</div></div>
       </div>
       ${newsHtml}
+    `;
+  } catch (err) {
+    body.innerHTML = "<p>상세 정보를 불러올 수 없습니다.</p>";
+  }
+}
+
+function renderOptionsRows(rows) {
+  if (!rows || rows.length === 0) {
+    return `<tr><td colspan="4" class="options-empty">데이터 없음</td></tr>`;
+  }
+  return rows.map((r) => `
+    <tr>
+      <td>${r.strike.toFixed(2)}</td>
+      <td>${r.last_price != null ? r.last_price.toFixed(2) : "-"}</td>
+      <td>${r.volume != null ? r.volume.toLocaleString("en-US") : "-"}</td>
+      <td>${r.open_interest != null ? r.open_interest.toLocaleString("en-US") : "-"}</td>
+    </tr>
+  `).join("");
+}
+
+async function openIndexDetail(symbol, name) {
+  const overlay = document.getElementById("modal-overlay");
+  const title = document.getElementById("modal-title");
+  const body = document.getElementById("modal-body");
+
+  title.textContent = name;
+  body.innerHTML = "<p>불러오는 중...</p>";
+  overlay.classList.remove("hidden");
+
+  try {
+    const res = await fetch(`/api/index/${encodeURIComponent(symbol)}`);
+    const data = await res.json();
+
+    if (!res.ok || data.error) {
+      body.innerHTML = "<p>상세 정보를 불러올 수 없습니다.</p>";
+      return;
+    }
+
+    const fmt = (n) => n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    const optionsHtml = data.options
+      ? `
+        <div class="options-section">
+          <h3>옵션 체인 (만기 ${escapeHtml(data.options.expiration)})</h3>
+          <p class="options-subtitle">콜(Call) — 행사가 근접 ${data.options.calls.length}건</p>
+          <table class="options-table">
+            <thead><tr><th>행사가</th><th>현재가</th><th>거래량</th><th>미결제약정</th></tr></thead>
+            <tbody>${renderOptionsRows(data.options.calls)}</tbody>
+          </table>
+          <p class="options-subtitle">풋(Put) — 행사가 근접 ${data.options.puts.length}건</p>
+          <table class="options-table">
+            <thead><tr><th>행사가</th><th>현재가</th><th>거래량</th><th>미결제약정</th></tr></thead>
+            <tbody>${renderOptionsRows(data.options.puts)}</tbody>
+          </table>
+        </div>
+      `
+      : `<div class="options-section"><h3>옵션 체인</h3><p>이 지수는 옵션 데이터를 제공하지 않습니다.</p></div>`;
+
+    body.innerHTML = `
+      <div class="detail-grid">
+        <div><div class="label">현재가</div><div class="value">${fmt(data.close)}</div></div>
+        <div><div class="label">전일 종가</div><div class="value">${fmt(data.prev_close)}</div></div>
+        <div><div class="label">시가</div><div class="value">${fmt(data.open)}</div></div>
+        <div><div class="label">고가</div><div class="value">${fmt(data.high)}</div></div>
+        <div><div class="label">저가</div><div class="value">${fmt(data.low)}</div></div>
+      </div>
+      ${optionsHtml}
     `;
   } catch (err) {
     body.innerHTML = "<p>상세 정보를 불러올 수 없습니다.</p>";
