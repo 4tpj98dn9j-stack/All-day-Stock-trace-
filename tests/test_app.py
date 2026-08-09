@@ -96,6 +96,45 @@ class DashboardAppTests(unittest.TestCase):
         with patch("app.yf.Ticker", side_effect=RuntimeError("network error")):
             self.assertEqual(app.fetch_news(app.TICKERS[0]), [])
 
+    def test_market_summary_endpoint_returns_indices_and_summary(self):
+        fake_results = {
+            "^IXIC": ("2026-08-05", 15000.0, 15100.0, 14900.0, 14950.0, 15100.0, -0.99),
+            "^NDX": ("2026-08-05", 18000.0, 18100.0, 17800.0, 17850.0, 18100.0, -1.38),
+            "^VIX": ("2026-08-05", 18.0, 22.0, 17.5, 21.0, 18.0, 16.67),
+        }
+
+        with patch("app.get_change", side_effect=lambda symbol: fake_results[symbol]):
+            response = self.client.get("/api/market-summary")
+            data = response.get_json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(data["indices"]), 3)
+        ixic = next(i for i in data["indices"] if i["symbol"] == "^IXIC")
+        self.assertEqual(ixic["name"], "나스닥종합지수")
+        self.assertEqual(ixic["price"], 14950.0)
+        self.assertEqual(ixic["change_pct"], -0.99)
+        self.assertIn("하락", data["summary"])
+        self.assertIn("약세", data["summary"])
+        self.assertIn("변동성 확대", data["summary"])
+
+    def test_market_summary_handles_missing_data(self):
+        with patch("app.get_change", return_value=None):
+            response = self.client.get("/api/market-summary")
+            data = response.get_json()
+
+        self.assertTrue(all("error" in item for item in data["indices"]))
+        self.assertEqual(data["summary"], "나스닥 시황 정보를 불러올 수 없습니다.")
+
+    def test_build_market_summary_up_and_calm(self):
+        summary = app.build_market_summary(ixic_pct=1.2, ndx_pct=1.5, vix_pct=-8.0)
+        self.assertIn("상승", summary)
+        self.assertIn("강세", summary)
+        self.assertIn("변동성 완화", summary)
+
+    def test_build_market_summary_flat(self):
+        summary = app.build_market_summary(ixic_pct=0.01, ndx_pct=0.0, vix_pct=1.0)
+        self.assertIn("보합", summary)
+
 
 if __name__ == "__main__":
     unittest.main()
