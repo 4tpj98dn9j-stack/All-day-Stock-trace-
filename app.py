@@ -150,25 +150,35 @@ def index_detail(symbol):
 def fetch_options_summary(symbol, current_price, strikes_per_side=5):
     """Return the nearest-expiry option chain narrowed to strikes closest to current_price.
 
-    Many index tickers (e.g. raw ^IXIC/^NDX) have no listed options at all, so this
-    returns None whenever yfinance reports no expirations or the lookup fails.
+    The result always has a "status": "ok" once a chain was fetched, "unavailable" when
+    the ticker genuinely has no listed options (common for raw index tickers like
+    ^IXIC/^NDX), or "error" when the yfinance lookup itself failed (network hiccup,
+    Yahoo rate limit, etc.) -- distinct from "unavailable" so the UI and logs don't
+    misreport a transient failure as "this index has no options".
     """
     try:
         ticker = yf.Ticker(symbol)
         expirations = ticker.options
-        if not expirations:
-            return None
+    except Exception as exc:
+        app.logger.warning("Failed to fetch option expirations for %s: %s", symbol, exc)
+        return {"status": "error"}
 
+    if not expirations:
+        return {"status": "unavailable"}
+
+    try:
         nearest_expiry = expirations[0]
         chain = ticker.option_chain(nearest_expiry)
+    except Exception as exc:
+        app.logger.warning("Failed to fetch option chain for %s: %s", symbol, exc)
+        return {"status": "error"}
 
-        return {
-            "expiration": nearest_expiry,
-            "calls": _nearest_strikes(chain.calls, current_price, strikes_per_side),
-            "puts": _nearest_strikes(chain.puts, current_price, strikes_per_side),
-        }
-    except Exception:
-        return None
+    return {
+        "status": "ok",
+        "expiration": nearest_expiry,
+        "calls": _nearest_strikes(chain.calls, current_price, strikes_per_side),
+        "puts": _nearest_strikes(chain.puts, current_price, strikes_per_side),
+    }
 
 
 def _nearest_strikes(df, current_price, count):

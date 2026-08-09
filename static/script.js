@@ -179,6 +179,42 @@ function renderOptionsRows(rows) {
   `).join("");
 }
 
+function renderOptionsSection(options) {
+  if (!options || options.status === "error") {
+    return `
+      <div class="options-section">
+        <h3>옵션 체인</h3>
+        <p>일시적으로 옵션 데이터를 불러오지 못했습니다. 새로고침 후 다시 시도해주세요.</p>
+      </div>
+    `;
+  }
+
+  if (options.status === "unavailable") {
+    return `
+      <div class="options-section">
+        <h3>옵션 체인</h3>
+        <p>이 지수는 옵션 데이터를 제공하지 않습니다.</p>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="options-section">
+      <h3>옵션 체인 (만기 ${escapeHtml(options.expiration)})</h3>
+      <p class="options-subtitle">콜(Call) — 행사가 근접 ${options.calls.length}건</p>
+      <table class="options-table">
+        <thead><tr><th>행사가</th><th>현재가</th><th>거래량</th><th>미결제약정</th></tr></thead>
+        <tbody>${renderOptionsRows(options.calls)}</tbody>
+      </table>
+      <p class="options-subtitle">풋(Put) — 행사가 근접 ${options.puts.length}건</p>
+      <table class="options-table">
+        <thead><tr><th>행사가</th><th>현재가</th><th>거래량</th><th>미결제약정</th></tr></thead>
+        <tbody>${renderOptionsRows(options.puts)}</tbody>
+      </table>
+    </div>
+  `;
+}
+
 async function openIndexDetail(symbol, name) {
   const overlay = document.getElementById("modal-overlay");
   const title = document.getElementById("modal-title");
@@ -199,23 +235,7 @@ async function openIndexDetail(symbol, name) {
 
     const fmt = (n) => n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-    const optionsHtml = data.options
-      ? `
-        <div class="options-section">
-          <h3>옵션 체인 (만기 ${escapeHtml(data.options.expiration)})</h3>
-          <p class="options-subtitle">콜(Call) — 행사가 근접 ${data.options.calls.length}건</p>
-          <table class="options-table">
-            <thead><tr><th>행사가</th><th>현재가</th><th>거래량</th><th>미결제약정</th></tr></thead>
-            <tbody>${renderOptionsRows(data.options.calls)}</tbody>
-          </table>
-          <p class="options-subtitle">풋(Put) — 행사가 근접 ${data.options.puts.length}건</p>
-          <table class="options-table">
-            <thead><tr><th>행사가</th><th>현재가</th><th>거래량</th><th>미결제약정</th></tr></thead>
-            <tbody>${renderOptionsRows(data.options.puts)}</tbody>
-          </table>
-        </div>
-      `
-      : `<div class="options-section"><h3>옵션 체인</h3><p>이 지수는 옵션 데이터를 제공하지 않습니다.</p></div>`;
+    const optionsHtml = renderOptionsSection(data.options);
 
     body.innerHTML = `
       <div class="detail-grid">
