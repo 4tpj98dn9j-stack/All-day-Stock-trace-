@@ -14,6 +14,12 @@ app = Flask(__name__)
 
 TICKERS = ["NOW", "TSLA", "SPCX", "INFQ", "PL", "QCOM"]
 
+INDICES = [
+    {"symbol": "^IXIC", "name": "나스닥종합지수"},
+    {"symbol": "^NDX", "name": "나스닥100"},
+    {"symbol": "^VIX", "name": "VIX"},
+]
+
 NEWS_LIMIT = 5
 
 
@@ -43,6 +49,70 @@ def quotes():
             "change_pct": round(pct_change, 2),
         })
     return jsonify(results)
+
+
+@app.route("/api/market-summary")
+def market_summary():
+    indices = []
+    pct_by_symbol = {}
+
+    for meta in INDICES:
+        symbol = meta["symbol"]
+        try:
+            result = get_change(symbol)
+        except Exception:
+            result = None
+
+        if result is None:
+            indices.append({"symbol": symbol, "name": meta["name"], "error": "no data"})
+            pct_by_symbol[symbol] = None
+            continue
+
+        _, _, _, _, close, prev_close, pct_change = result
+        indices.append({
+            "symbol": symbol,
+            "name": meta["name"],
+            "price": round(close, 2),
+            "change": round(close - prev_close, 2),
+            "change_pct": round(pct_change, 2),
+        })
+        pct_by_symbol[symbol] = pct_change
+
+    summary = build_market_summary(
+        pct_by_symbol.get("^IXIC"), pct_by_symbol.get("^NDX"), pct_by_symbol.get("^VIX"),
+    )
+    return jsonify({"indices": indices, "summary": summary})
+
+
+def build_market_summary(ixic_pct, ndx_pct, vix_pct):
+    """Rule-based one-line market recap, e.g. '나스닥 하락 마감, 기술주 전반 약세'."""
+    if ixic_pct is None:
+        return "나스닥 시황 정보를 불러올 수 없습니다."
+
+    if ixic_pct > 0.05:
+        direction = "상승"
+    elif ixic_pct < -0.05:
+        direction = "하락"
+    else:
+        direction = "보합"
+
+    if ndx_pct is None:
+        tech_word = "혼조"
+    elif ndx_pct > 0.05:
+        tech_word = "강세"
+    elif ndx_pct < -0.05:
+        tech_word = "약세"
+    else:
+        tech_word = "보합"
+
+    vix_phrase = ""
+    if vix_pct is not None:
+        if vix_pct > 5:
+            vix_phrase = ", 변동성 확대"
+        elif vix_pct < -5:
+            vix_phrase = ", 변동성 완화"
+
+    return f"나스닥 {direction} 마감, 기술주 전반 {tech_word}{vix_phrase}"
 
 
 @app.route("/api/quote/<ticker>")

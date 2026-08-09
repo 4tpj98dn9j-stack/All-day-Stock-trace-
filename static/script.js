@@ -13,13 +13,51 @@ function isSafeHttpUrl(url) {
   }
 }
 
+async function loadMarketSummary() {
+  const indicesEl = document.getElementById("market-indices");
+  const commentEl = document.getElementById("market-comment");
+
+  try {
+    const res = await fetch("/api/market-summary");
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+    const data = await res.json();
+
+    indicesEl.innerHTML = "";
+    (data.indices || []).forEach((idx) => {
+      const chip = document.createElement("div");
+      chip.className = "index-chip";
+
+      if (idx.error) {
+        chip.innerHTML = `
+          <div class="index-name">${escapeHtml(idx.name)}</div>
+          <div class="index-change">데이터 없음</div>
+        `;
+      } else {
+        const isUp = idx.change_pct >= 0;
+        chip.classList.add(isUp ? "up" : "down");
+        const sign = isUp ? "+" : "";
+        chip.innerHTML = `
+          <div class="index-name">${escapeHtml(idx.name)}</div>
+          <div class="index-price">${idx.price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+          <div class="index-change">${sign}${idx.change.toFixed(2)} (${sign}${idx.change_pct.toFixed(2)}%)</div>
+        `;
+      }
+
+      indicesEl.appendChild(chip);
+    });
+
+    commentEl.textContent = data.summary || "";
+  } catch (err) {
+    indicesEl.innerHTML = `<div class="error">시황 정보를 불러오지 못했습니다.</div>`;
+    commentEl.textContent = "";
+  }
+}
+
 async function loadQuotes() {
-  const btn = document.getElementById("refresh-btn");
   const cardsEl = document.getElementById("cards");
   const updatedEl = document.getElementById("updated-at");
-
-  btn.disabled = true;
-  btn.textContent = "불러오는 중...";
 
   try {
     const res = await fetch("/api/quotes");
@@ -56,6 +94,17 @@ async function loadQuotes() {
     updatedEl.textContent = `마지막 업데이트: ${new Date().toLocaleTimeString("ko-KR")}`;
   } catch (err) {
     cardsEl.innerHTML = `<div class="error">데이터를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.</div>`;
+  }
+}
+
+async function refreshAll() {
+  const btn = document.getElementById("refresh-btn");
+
+  btn.disabled = true;
+  btn.textContent = "불러오는 중...";
+
+  try {
+    await Promise.all([loadMarketSummary(), loadQuotes()]);
   } finally {
     btn.disabled = false;
     btn.textContent = "새로고침";
@@ -119,7 +168,7 @@ function closeDetail() {
   document.getElementById("modal-overlay").classList.add("hidden");
 }
 
-document.getElementById("refresh-btn").addEventListener("click", loadQuotes);
+document.getElementById("refresh-btn").addEventListener("click", refreshAll);
 document.getElementById("modal-close").addEventListener("click", closeDetail);
 document.getElementById("modal-overlay").addEventListener("click", (e) => {
   if (e.target.id === "modal-overlay") {
@@ -132,4 +181,4 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-window.addEventListener("DOMContentLoaded", loadQuotes);
+window.addEventListener("DOMContentLoaded", refreshAll);
