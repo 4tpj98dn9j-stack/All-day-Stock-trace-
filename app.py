@@ -23,7 +23,20 @@ INDICES = [
 
 NEWS_LIMIT = 5
 
-CHART_RANGES = {"1mo", "3mo", "6mo", "1y"}
+CHART_RANGES = {
+    "1d": {"period": "1d", "interval": "5m"},
+    "1w": {"period": "5d", "interval": "15m"},
+    "1mo": {"period": "1mo", "interval": "1d"},
+    "3mo": {"period": "3mo", "interval": "1d"},
+    "6mo": {"period": "6mo", "interval": "1d"},
+    "ytd": {"period": "ytd", "interval": "1d"},
+    "1y": {"period": "1y", "interval": "1d"},
+    "2y": {"period": "2y", "interval": "1d"},
+    "5y": {"period": "5y", "interval": "1wk"},
+    "10y": {"period": "10y", "interval": "1wk"},
+    "max": {"period": "max", "interval": "1mo"},
+}
+INTRADAY_INTERVALS = {"1m", "2m", "5m", "15m", "30m", "60m", "90m", "1h"}
 DEFAULT_CHART_RANGE = "3mo"
 
 
@@ -236,7 +249,32 @@ def quote_detail(ticker):
         "change": round(close - prev_close, 2),
         "change_pct": round(pct_change, 2),
         "news": fetch_news(ticker),
+        "stats": fetch_stats(ticker),
     })
+
+
+def fetch_stats(ticker):
+    """Return supplementary fundamentals (market cap, PE, 52-week range, beta, EPS, avg volume).
+
+    Backed by yfinance's Ticker.info, which is a broad, occasionally-missing-keys
+    dict scraped from Yahoo's quote page -- any field can legitimately be absent
+    for a given ticker, so every value defaults to None rather than raising.
+    """
+    try:
+        info = yf.Ticker(ticker).info
+    except Exception as exc:
+        app.logger.warning("Failed to fetch stats for %s: %s", ticker, exc)
+        return None
+
+    return {
+        "market_cap": info.get("marketCap"),
+        "pe_ratio": info.get("trailingPE"),
+        "eps": info.get("trailingEps"),
+        "beta": info.get("beta"),
+        "week52_high": info.get("fiftyTwoWeekHigh"),
+        "week52_low": info.get("fiftyTwoWeekLow"),
+        "avg_volume": info.get("averageVolume"),
+    }
 
 
 @app.route("/api/quote/<ticker>/history")
@@ -246,18 +284,24 @@ def quote_history(ticker):
         return jsonify({"error": "unknown ticker"}), 404
 
     range_param = request.args.get("range", DEFAULT_CHART_RANGE)
-    if range_param not in CHART_RANGES:
+    range_config = CHART_RANGES.get(range_param)
+    if range_config is None:
         return jsonify({"error": "invalid range"}), 400
 
+    interval = range_config["interval"]
+    date_format = "%Y-%m-%d %H:%M" if interval in INTRADAY_INTERVALS else "%Y-%m-%d"
+
     try:
-        history = yf.Ticker(ticker).history(period=range_param, auto_adjust=True)
+        history = yf.Ticker(ticker).history(
+            period=range_config["period"], interval=interval, auto_adjust=True,
+        )
         history = history.dropna(subset=["Close"])
     except Exception as exc:
         app.logger.warning("Failed to fetch chart history for %s (%s): %s", ticker, range_param, exc)
         return jsonify({"ticker": ticker, "range": range_param, "points": []})
 
     points = [
-        {"date": idx.strftime("%Y-%m-%d"), "close": round(float(close), 2)}
+        {"date": idx.strftime(date_format), "close": round(float(close), 2)}
         for idx, close in history["Close"].items()
     ]
     return jsonify({"ticker": ticker, "range": range_param, "points": points})
