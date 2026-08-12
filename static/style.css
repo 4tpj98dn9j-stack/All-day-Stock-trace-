@@ -220,9 +220,13 @@ h1 {
   display: flex;
   gap: 6px;
   margin-bottom: 8px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 2px;
 }
 
 .range-btn {
+  flex: 0 0 auto;
   border: 1px solid #ddd;
   background: #fff;
   border-radius: 999px;
@@ -230,6 +234,7 @@ h1 {
   font-size: 0.78rem;
   color: #555;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .range-btn.active {
@@ -267,6 +272,16 @@ h1 {
 .detail-grid .value {
   font-size: 0.95rem;
   font-weight: 600;
+}
+
+.stats-title {
+  font-size: 0.95rem;
+  margin: 0 0 8px;
+  color: #555;
+}
+
+.stats-grid {
+  margin-bottom: 16px;
 }
 
 .news-list h3 {

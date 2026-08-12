@@ -57,6 +57,15 @@ class DashboardAppTests(unittest.TestCase):
         mock_ticker = MagicMock()
         mock_ticker.history.return_value = fake_history
         mock_ticker.news = fake_news
+        mock_ticker.info = {
+            "marketCap": 1_500_000_000_000,
+            "trailingPE": 28.4,
+            "trailingEps": 6.1,
+            "beta": 1.3,
+            "fiftyTwoWeekHigh": 220.5,
+            "fiftyTwoWeekLow": 140.2,
+            "averageVolume": 45_000_000,
+        }
 
         with patch("app.get_change", return_value=fake_result), \
              patch("app.yf.Ticker", return_value=mock_ticker):
@@ -71,6 +80,10 @@ class DashboardAppTests(unittest.TestCase):
         self.assertEqual(len(data["news"]), 1)
         self.assertEqual(data["news"][0]["title"], "Sample headline")
         self.assertEqual(data["news"][0]["link"], "https://example.com/news/1")
+        self.assertEqual(data["stats"]["market_cap"], 1_500_000_000_000)
+        self.assertEqual(data["stats"]["pe_ratio"], 28.4)
+        self.assertEqual(data["stats"]["week52_high"], 220.5)
+        self.assertEqual(data["stats"]["week52_low"], 140.2)
 
     def test_quote_detail_unknown_ticker_returns_404(self):
         response = self.client.get("/api/quote/NOTREAL")
@@ -97,7 +110,7 @@ class DashboardAppTests(unittest.TestCase):
         self.assertEqual(data["range"], "1mo")
         self.assertEqual(len(data["points"]), 3)
         self.assertEqual(data["points"][0]["close"], 180.5)
-        mock_ticker.history.assert_called_once_with(period="1mo", auto_adjust=True)
+        mock_ticker.history.assert_called_once_with(period="1mo", interval="1d", auto_adjust=True)
 
     def test_quote_history_defaults_range(self):
         mock_ticker = MagicMock()
@@ -107,10 +120,27 @@ class DashboardAppTests(unittest.TestCase):
             response = self.client.get(f"/api/quote/{app.TICKERS[0]}/history")
 
         self.assertEqual(response.status_code, 200)
-        mock_ticker.history.assert_called_once_with(period=app.DEFAULT_CHART_RANGE, auto_adjust=True)
+        default_config = app.CHART_RANGES[app.DEFAULT_CHART_RANGE]
+        mock_ticker.history.assert_called_once_with(
+            period=default_config["period"], interval=default_config["interval"], auto_adjust=True,
+        )
+
+    def test_quote_history_uses_intraday_interval_and_time_format(self):
+        idx = pd.date_range("2026-08-05 09:30", periods=2, freq="5min", tz="America/New_York")
+        fake_history = pd.DataFrame({"Close": [180.1, 180.4]}, index=idx)
+        mock_ticker = MagicMock()
+        mock_ticker.history.return_value = fake_history
+
+        with patch("app.yf.Ticker", return_value=mock_ticker):
+            response = self.client.get(f"/api/quote/{app.TICKERS[0]}/history?range=1d")
+            data = response.get_json()
+
+        self.assertEqual(response.status_code, 200)
+        mock_ticker.history.assert_called_once_with(period="1d", interval="5m", auto_adjust=True)
+        self.assertEqual(data["points"][0]["date"], "2026-08-05 09:30")
 
     def test_quote_history_rejects_invalid_range(self):
-        response = self.client.get(f"/api/quote/{app.TICKERS[0]}/history?range=10y")
+        response = self.client.get(f"/api/quote/{app.TICKERS[0]}/history?range=15y")
         self.assertEqual(response.status_code, 400)
 
     def test_quote_history_unknown_ticker_returns_404(self):
@@ -124,6 +154,45 @@ class DashboardAppTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(data["points"], [])
+
+    def test_fetch_stats_returns_known_fields(self):
+        mock_ticker = MagicMock()
+        mock_ticker.info = {
+            "marketCap": 987_000_000_000,
+            "trailingPE": 31.2,
+            "trailingEps": 4.5,
+            "beta": 1.1,
+            "fiftyTwoWeekHigh": 300.0,
+            "fiftyTwoWeekLow": 180.0,
+            "averageVolume": 12_000_000,
+            "someOtherField": "ignored",
+        }
+
+        with patch("app.yf.Ticker", return_value=mock_ticker):
+            stats = app.fetch_stats(app.TICKERS[0])
+
+        self.assertEqual(stats, {
+            "market_cap": 987_000_000_000,
+            "pe_ratio": 31.2,
+            "eps": 4.5,
+            "beta": 1.1,
+            "week52_high": 300.0,
+            "week52_low": 180.0,
+            "avg_volume": 12_000_000,
+        })
+
+    def test_fetch_stats_defaults_missing_fields_to_none(self):
+        mock_ticker = MagicMock()
+        mock_ticker.info = {}
+
+        with patch("app.yf.Ticker", return_value=mock_ticker):
+            stats = app.fetch_stats(app.TICKERS[0])
+
+        self.assertTrue(all(v is None for v in stats.values()))
+
+    def test_fetch_stats_handles_exceptions(self):
+        with patch("app.yf.Ticker", side_effect=RuntimeError("network error")):
+            self.assertIsNone(app.fetch_stats(app.TICKERS[0]))
 
     def test_fetch_news_tolerates_legacy_schema(self):
         mock_ticker = MagicMock()

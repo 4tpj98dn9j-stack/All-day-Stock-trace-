@@ -1,10 +1,48 @@
 const CHART_RANGES = [
+  { value: "1d", label: "1일" },
+  { value: "1w", label: "1주" },
   { value: "1mo", label: "1개월" },
   { value: "3mo", label: "3개월" },
   { value: "6mo", label: "6개월" },
+  { value: "ytd", label: "YTD" },
   { value: "1y", label: "1년" },
+  { value: "2y", label: "2년" },
+  { value: "5y", label: "5년" },
+  { value: "10y", label: "10년" },
+  { value: "max", label: "전체" },
 ];
 const DEFAULT_CHART_RANGE = "3mo";
+
+function formatLargeNumber(n) {
+  if (n == null) return "-";
+  const abs = Math.abs(n);
+  if (abs >= 1e12) return `${(n / 1e12).toFixed(2)}T`;
+  if (abs >= 1e9) return `${(n / 1e9).toFixed(2)}B`;
+  if (abs >= 1e6) return `${(n / 1e6).toFixed(2)}M`;
+  return n.toLocaleString("en-US");
+}
+
+function formatStat(n, decimals = 2) {
+  return n == null ? "-" : n.toFixed(decimals);
+}
+
+function renderStatsGrid(stats) {
+  if (!stats) {
+    return "";
+  }
+  return `
+    <h3 class="stats-title">추가 정보</h3>
+    <div class="detail-grid stats-grid">
+      <div><div class="label">시가총액</div><div class="value">${stats.market_cap != null ? "$" + formatLargeNumber(stats.market_cap) : "-"}</div></div>
+      <div><div class="label">PER</div><div class="value">${formatStat(stats.pe_ratio)}</div></div>
+      <div><div class="label">EPS</div><div class="value">${stats.eps != null ? "$" + formatStat(stats.eps) : "-"}</div></div>
+      <div><div class="label">베타</div><div class="value">${formatStat(stats.beta)}</div></div>
+      <div><div class="label">52주 최고</div><div class="value">${stats.week52_high != null ? "$" + formatStat(stats.week52_high) : "-"}</div></div>
+      <div><div class="label">52주 최저</div><div class="value">${stats.week52_low != null ? "$" + formatStat(stats.week52_low) : "-"}</div></div>
+      <div><div class="label">평균 거래량</div><div class="value">${stats.avg_volume != null ? formatLargeNumber(stats.avg_volume) : "-"}</div></div>
+    </div>
+  `;
+}
 
 function escapeHtml(str) {
   const div = document.createElement("div");
@@ -178,6 +216,7 @@ async function openDetail(ticker) {
         <div><div class="label">저가</div><div class="value">$${data.low.toFixed(2)}</div></div>
         <div><div class="label">거래량</div><div class="value">${volumeText}</div></div>
       </div>
+      ${renderStatsGrid(data.stats)}
       ${newsHtml}
     `;
 
