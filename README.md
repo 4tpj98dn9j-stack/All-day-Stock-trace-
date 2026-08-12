@@ -24,6 +24,20 @@ pip install -r requirements.txt
   # http://localhost:5000 접속, 새로고침 버튼으로 시세 갱신
   ```
 
+## 옵션 체인 (Tradier, 선택)
+
+나스닥/VIX 카드의 옵션 체인은 Yahoo Finance가 아니라 [Tradier](https://tradier.com) 샌드박스 API에서 가져옵니다 (Yahoo의 비공식 옵션 API가 공유 호스팅 IP에서 자주 rate-limit에 걸려서 대체함).
+
+1. [tradier.com](https://tradier.com)에서 무료 계정 가입
+2. 개발자 설정에서 **Sandbox Access Token** 발급 (실거래 계좌/입금 불필요, 15분 지연 데이터)
+3. 환경변수로 설정:
+   ```bash
+   export TRADIER_API_TOKEN=your-sandbox-token
+   ```
+   Render에 배포한 경우 서비스 → **Environment** 탭에서 `TRADIER_API_TOKEN` 키로 추가
+
+토큰을 설정하지 않으면 옵션 체인 섹션은 에러 없이 "옵션 데이터를 제공하지 않습니다"로 표시됩니다 (그 외 시세/차트/뉴스는 토큰과 무관하게 정상 동작).
+
 ## 테스트
 
 ```bash
