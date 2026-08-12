@@ -83,6 +83,48 @@ class DashboardAppTests(unittest.TestCase):
 
         self.assertEqual(data["error"], "no data")
 
+    def test_quote_history_returns_points(self):
+        idx = pd.date_range("2026-07-01", periods=3, freq="B", tz="America/New_York")
+        fake_history = pd.DataFrame({"Close": [180.5, 181.25, 179.9]}, index=idx)
+        mock_ticker = MagicMock()
+        mock_ticker.history.return_value = fake_history
+
+        with patch("app.yf.Ticker", return_value=mock_ticker):
+            response = self.client.get(f"/api/quote/{app.TICKERS[0]}/history?range=1mo")
+            data = response.get_json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(data["range"], "1mo")
+        self.assertEqual(len(data["points"]), 3)
+        self.assertEqual(data["points"][0]["close"], 180.5)
+        mock_ticker.history.assert_called_once_with(period="1mo", auto_adjust=True)
+
+    def test_quote_history_defaults_range(self):
+        mock_ticker = MagicMock()
+        mock_ticker.history.return_value = pd.DataFrame({"Close": []})
+
+        with patch("app.yf.Ticker", return_value=mock_ticker):
+            response = self.client.get(f"/api/quote/{app.TICKERS[0]}/history")
+
+        self.assertEqual(response.status_code, 200)
+        mock_ticker.history.assert_called_once_with(period=app.DEFAULT_CHART_RANGE, auto_adjust=True)
+
+    def test_quote_history_rejects_invalid_range(self):
+        response = self.client.get(f"/api/quote/{app.TICKERS[0]}/history?range=10y")
+        self.assertEqual(response.status_code, 400)
+
+    def test_quote_history_unknown_ticker_returns_404(self):
+        response = self.client.get("/api/quote/NOTREAL/history")
+        self.assertEqual(response.status_code, 404)
+
+    def test_quote_history_handles_exceptions(self):
+        with patch("app.yf.Ticker", side_effect=RuntimeError("network error")):
+            response = self.client.get(f"/api/quote/{app.TICKERS[0]}/history")
+            data = response.get_json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(data["points"], [])
+
     def test_fetch_news_tolerates_legacy_schema(self):
         mock_ticker = MagicMock()
         mock_ticker.news = [{"title": "Legacy headline", "link": "https://example.com/legacy", "publisher": "Old Wire"}]
