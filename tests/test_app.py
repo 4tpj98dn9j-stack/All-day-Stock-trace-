@@ -9,6 +9,7 @@ import app
 class DashboardAppTests(unittest.TestCase):
     def setUp(self):
         self.client = app.app.test_client()
+        app._CACHE.clear()
 
     def test_index_returns_200(self):
         response = self.client.get("/")
@@ -245,6 +246,49 @@ class DashboardAppTests(unittest.TestCase):
     def test_build_market_summary_flat(self):
         summary = app.build_market_summary(ixic_pct=0.01, ndx_pct=0.0, vix_pct=1.0)
         self.assertIn("보합", summary)
+
+    def test_cached_get_change_reuses_result_within_ttl(self):
+        fake_result = ("2026-08-05", 100.0, 105.0, 99.0, 102.0, 100.0, 2.0)
+        with patch("app.get_change", return_value=fake_result) as mock_get_change:
+            first = app._cached_get_change("NOW")
+            second = app._cached_get_change("NOW")
+
+        self.assertEqual(first, fake_result)
+        self.assertEqual(second, fake_result)
+        mock_get_change.assert_called_once_with("NOW")
+
+    def test_cached_get_change_refetches_after_ttl_expiry(self):
+        fake_result = ("2026-08-05", 100.0, 105.0, 99.0, 102.0, 100.0, 2.0)
+        with patch("app.get_change", return_value=fake_result) as mock_get_change:
+            app._cached_get_change("NOW")
+            # simulate the cache entry having expired
+            key = ("get_change", "NOW")
+            value, _ = app._CACHE[key]
+            app._CACHE[key] = (value, 0)
+            app._cached_get_change("NOW")
+
+        self.assertEqual(mock_get_change.call_count, 2)
+
+    def test_cached_raw_option_chain_reused_across_different_prices(self):
+        mock_ticker = MagicMock()
+        mock_ticker.options = ["2026-08-15"]
+        mock_chain = MagicMock()
+        mock_chain.calls = pd.DataFrame({
+            "strike": [19.0, 20.0], "lastPrice": [2.1, 1.5], "volume": [100, 200], "openInterest": [500, 600],
+        })
+        mock_chain.puts = pd.DataFrame({
+            "strike": [19.0, 20.0], "lastPrice": [0.2, 0.5], "volume": [80, 90], "openInterest": [300, 350],
+        })
+        mock_ticker.option_chain.return_value = mock_chain
+
+        with patch("app.yf.Ticker", return_value=mock_ticker) as mock_ticker_ctor:
+            app.fetch_options_summary("^VIX", 19.5)
+            app.fetch_options_summary("^VIX", 20.1)
+
+        # Ticker() and option_chain() should only be hit once even though the
+        # price used for narrowing strikes differed between calls.
+        mock_ticker_ctor.assert_called_once_with("^VIX")
+        mock_ticker.option_chain.assert_called_once()
 
     def test_index_detail_returns_ohlc_and_options(self):
         fake_result = ("2026-08-05", 18.0, 22.0, 17.5, 21.0, 18.0, 16.67)

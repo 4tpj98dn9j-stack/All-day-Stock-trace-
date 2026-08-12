@@ -5,6 +5,8 @@ Usage:
     (open http://localhost:5000)
 """
 
+import time
+
 import pandas as pd
 import yfinance as yf
 from flask import Flask, jsonify, render_template, request
@@ -22,6 +24,61 @@ INDICES = [
 ]
 
 NEWS_LIMIT = 5
+
+# Yahoo Finance (via yfinance) rate-limits aggressively, especially the options
+# endpoint. Every route below is cached in-process for a short TTL so repeated
+# clicks/refreshes reuse the same data instead of hammering Yahoo on every request.
+_CACHE = {}
+QUOTE_CACHE_TTL = 30
+DETAIL_CACHE_TTL = 300
+HISTORY_CACHE_TTL = 60
+OPTIONS_CACHE_TTL = 300
+
+
+def _cache_get(key):
+    entry = _CACHE.get(key)
+    if entry is None:
+        return None
+    value, expires_at = entry
+    if time.monotonic() >= expires_at:
+        del _CACHE[key]
+        return None
+    return value
+
+
+def _cache_set(key, value, ttl_seconds):
+    _CACHE[key] = (value, time.monotonic() + ttl_seconds)
+
+
+def _cached_get_change(symbol):
+    key = ("get_change", symbol)
+    cached = _cache_get(key)
+    if cached is not None:
+        return cached
+
+    try:
+        result = get_change(symbol)
+    except Exception:
+        result = None
+
+    _cache_set(key, result, QUOTE_CACHE_TTL)
+    return result
+
+
+def _cached_recent_history(ticker):
+    key = ("recent_history", ticker)
+    cached = _cache_get(key)
+    if cached is not None:
+        return cached
+
+    try:
+        history = yf.Ticker(ticker).history(period="5d", auto_adjust=True)
+    except Exception:
+        history = None
+
+    _cache_set(key, history, QUOTE_CACHE_TTL)
+    return history
+
 
 CHART_RANGES = {
     "1d": {"period": "1d", "interval": "5m"},
@@ -49,10 +106,7 @@ def index():
 def quotes():
     results = []
     for ticker in TICKERS:
-        try:
-            result = get_change(ticker)
-        except Exception:
-            result = None
+        result = _cached_get_change(ticker)
 
         if result is None:
             results.append({"ticker": ticker, "error": "no data"})
@@ -75,10 +129,7 @@ def market_summary():
 
     for meta in INDICES:
         symbol = meta["symbol"]
-        try:
-            result = get_change(symbol)
-        except Exception:
-            result = None
+        result = _cached_get_change(symbol)
 
         if result is None:
             indices.append({"symbol": symbol, "name": meta["name"], "error": "no data"})
@@ -138,10 +189,7 @@ def index_detail(symbol):
     if meta is None:
         return jsonify({"error": "unknown index"}), 404
 
-    try:
-        result = get_change(meta["symbol"])
-    except Exception:
-        result = None
+    result = _cached_get_change(meta["symbol"])
 
     if result is None:
         return jsonify({"symbol": meta["symbol"], "name": meta["name"], "error": "no data"})
@@ -171,30 +219,60 @@ def fetch_options_summary(symbol, current_price, strikes_per_side=5):
     ^IXIC/^NDX), or "error" when the yfinance lookup itself failed (network hiccup,
     Yahoo rate limit, etc.) -- distinct from "unavailable" so the UI and logs don't
     misreport a transient failure as "this index has no options".
+
+    The Yahoo fetch itself is cached by symbol alone (see _cached_raw_option_chain);
+    narrowing to strikes near current_price is cheap and always recomputed so a
+    fluctuating price never bypasses the cache.
     """
+    raw = _cached_raw_option_chain(symbol)
+    if raw["status"] != "ok":
+        return {"status": raw["status"]}
+
+    return {
+        "status": "ok",
+        "expiration": raw["expiration"],
+        "calls": _nearest_strikes(raw["calls"], current_price, strikes_per_side),
+        "puts": _nearest_strikes(raw["puts"], current_price, strikes_per_side),
+    }
+
+
+def _cached_raw_option_chain(symbol):
+    key = ("option_chain", symbol)
+    cached = _cache_get(key)
+    if cached is not None:
+        return cached
+
     try:
         ticker = yf.Ticker(symbol)
         expirations = ticker.options
     except Exception as exc:
         app.logger.warning("Failed to fetch option expirations for %s: %s", symbol, exc)
-        return {"status": "error"}
+        result = {"status": "error"}
+        _cache_set(key, result, OPTIONS_CACHE_TTL)
+        return result
 
     if not expirations:
-        return {"status": "unavailable"}
+        result = {"status": "unavailable"}
+        _cache_set(key, result, OPTIONS_CACHE_TTL)
+        return result
 
     try:
         nearest_expiry = expirations[0]
         chain = ticker.option_chain(nearest_expiry)
     except Exception as exc:
         app.logger.warning("Failed to fetch option chain for %s: %s", symbol, exc)
-        return {"status": "error"}
+        result = {"status": "error"}
+        _cache_set(key, result, OPTIONS_CACHE_TTL)
+        return result
 
-    return {
+    result = {
         "status": "ok",
         "expiration": nearest_expiry,
-        "calls": _nearest_strikes(chain.calls, current_price, strikes_per_side),
-        "puts": _nearest_strikes(chain.puts, current_price, strikes_per_side),
+        "calls": chain.calls,
+        "puts": chain.puts,
     }
+    _cache_set(key, result, OPTIONS_CACHE_TTL)
+    return result
 
 
 def _nearest_strikes(df, current_price, count):
@@ -220,10 +298,7 @@ def quote_detail(ticker):
     if ticker not in TICKERS:
         return jsonify({"error": "unknown ticker"}), 404
 
-    try:
-        result = get_change(ticker)
-    except Exception:
-        result = None
+    result = _cached_get_change(ticker)
 
     if result is None:
         return jsonify({"ticker": ticker, "error": "no data"})
@@ -231,11 +306,12 @@ def quote_detail(ticker):
     date, open_, high, low, close, prev_close, pct_change = result
 
     volume = None
-    try:
-        history = yf.Ticker(ticker).history(period="5d", auto_adjust=True)
-        volume = int(history["Volume"].dropna().iloc[-1])
-    except Exception:
-        pass
+    history = _cached_recent_history(ticker)
+    if history is not None:
+        try:
+            volume = int(history["Volume"].dropna().iloc[-1])
+        except Exception:
+            pass
 
     return jsonify({
         "ticker": ticker,
@@ -260,13 +336,19 @@ def fetch_stats(ticker):
     dict scraped from Yahoo's quote page -- any field can legitimately be absent
     for a given ticker, so every value defaults to None rather than raising.
     """
+    key = ("stats", ticker)
+    cached = _cache_get(key)
+    if cached is not None:
+        return cached
+
     try:
         info = yf.Ticker(ticker).info
     except Exception as exc:
         app.logger.warning("Failed to fetch stats for %s: %s", ticker, exc)
+        _cache_set(key, None, DETAIL_CACHE_TTL)
         return None
 
-    return {
+    result = {
         "market_cap": info.get("marketCap"),
         "pe_ratio": info.get("trailingPE"),
         "eps": info.get("trailingEps"),
@@ -275,6 +357,8 @@ def fetch_stats(ticker):
         "week52_low": info.get("fiftyTwoWeekLow"),
         "avg_volume": info.get("averageVolume"),
     }
+    _cache_set(key, result, DETAIL_CACHE_TTL)
+    return result
 
 
 @app.route("/api/quote/<ticker>/history")
@@ -288,6 +372,16 @@ def quote_history(ticker):
     if range_config is None:
         return jsonify({"error": "invalid range"}), 400
 
+    points = _cached_chart_points(ticker, range_param, range_config)
+    return jsonify({"ticker": ticker, "range": range_param, "points": points})
+
+
+def _cached_chart_points(ticker, range_param, range_config):
+    key = ("chart", ticker, range_param)
+    cached = _cache_get(key)
+    if cached is not None:
+        return cached
+
     interval = range_config["interval"]
     date_format = "%Y-%m-%d %H:%M" if interval in INTRADAY_INTERVALS else "%Y-%m-%d"
 
@@ -298,20 +392,28 @@ def quote_history(ticker):
         history = history.dropna(subset=["Close"])
     except Exception as exc:
         app.logger.warning("Failed to fetch chart history for %s (%s): %s", ticker, range_param, exc)
-        return jsonify({"ticker": ticker, "range": range_param, "points": []})
+        _cache_set(key, [], HISTORY_CACHE_TTL)
+        return []
 
     points = [
         {"date": idx.strftime(date_format), "close": round(float(close), 2)}
         for idx, close in history["Close"].items()
     ]
-    return jsonify({"ticker": ticker, "range": range_param, "points": points})
+    _cache_set(key, points, HISTORY_CACHE_TTL)
+    return points
 
 
 def fetch_news(ticker):
     """Return up to NEWS_LIMIT recent headlines, tolerant of yfinance's news schema changes."""
+    key = ("news", ticker)
+    cached = _cache_get(key)
+    if cached is not None:
+        return cached
+
     try:
         raw_items = yf.Ticker(ticker).news or []
     except Exception:
+        _cache_set(key, [], DETAIL_CACHE_TTL)
         return []
 
     news = []
@@ -326,6 +428,7 @@ def fetch_news(ticker):
         if title and link:
             news.append({"title": title, "link": link, "publisher": publisher})
 
+    _cache_set(key, news, DETAIL_CACHE_TTL)
     return news
 
 
