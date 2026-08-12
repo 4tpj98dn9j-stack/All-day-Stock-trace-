@@ -5,9 +5,11 @@ Usage:
     (open http://localhost:5000)
 """
 
+import os
 import time
 
 import pandas as pd
+import requests
 import yfinance as yf
 from flask import Flask, jsonify, render_template, request
 
@@ -24,6 +26,15 @@ INDICES = [
 ]
 
 NEWS_LIMIT = 5
+
+# Option chains come from Tradier instead of Yahoo/yfinance, whose unofficial
+# options endpoint rate-limits aggressively on shared hosting IPs (see PR #9).
+# Sandbox is free (15-min delayed) and needs no funded account -- sign up at
+# https://tradier.com, generate a sandbox token, and set TRADIER_API_TOKEN.
+# With no token configured, the options section just reports "unavailable"
+# rather than erroring.
+TRADIER_API_TOKEN = os.environ.get("TRADIER_API_TOKEN")
+TRADIER_BASE_URL = os.environ.get("TRADIER_BASE_URL", "https://sandbox.tradier.com/v1")
 
 # Yahoo Finance (via yfinance) rate-limits aggressively, especially the options
 # endpoint. Every route below is cached in-process for a short TTL so repeated
@@ -242,37 +253,69 @@ def _cached_raw_option_chain(symbol):
     if cached is not None:
         return cached
 
-    try:
-        ticker = yf.Ticker(symbol)
-        expirations = ticker.options
-    except Exception as exc:
-        app.logger.warning("Failed to fetch option expirations for %s: %s", symbol, exc)
-        result = {"status": "error"}
-        _cache_set(key, result, OPTIONS_CACHE_TTL)
-        return result
-
-    if not expirations:
-        result = {"status": "unavailable"}
-        _cache_set(key, result, OPTIONS_CACHE_TTL)
-        return result
-
-    try:
-        nearest_expiry = expirations[0]
-        chain = ticker.option_chain(nearest_expiry)
-    except Exception as exc:
-        app.logger.warning("Failed to fetch option chain for %s: %s", symbol, exc)
-        result = {"status": "error"}
-        _cache_set(key, result, OPTIONS_CACHE_TTL)
-        return result
-
-    result = {
-        "status": "ok",
-        "expiration": nearest_expiry,
-        "calls": chain.calls,
-        "puts": chain.puts,
-    }
+    result = _fetch_tradier_option_chain(symbol)
     _cache_set(key, result, OPTIONS_CACHE_TTL)
     return result
+
+
+def _fetch_tradier_option_chain(symbol):
+    """Fetch the nearest-expiry option chain for symbol from Tradier.
+
+    Tradier symbols drop Yahoo's "^" index prefix (e.g. "VIX", not "^VIX").
+    Returns {"status": "unavailable"} with no API call at all when no token is
+    configured, so this degrades cleanly rather than erroring on every request.
+    """
+    if not TRADIER_API_TOKEN:
+        return {"status": "unavailable"}
+
+    tradier_symbol = symbol.lstrip("^")
+    headers = {"Authorization": f"Bearer {TRADIER_API_TOKEN}", "Accept": "application/json"}
+
+    try:
+        exp_response = requests.get(
+            f"{TRADIER_BASE_URL}/markets/options/expirations",
+            params={"symbol": tradier_symbol},
+            headers=headers,
+            timeout=10,
+        )
+        exp_response.raise_for_status()
+        dates = (exp_response.json().get("expirations") or {}).get("date")
+    except Exception as exc:
+        app.logger.warning("Failed to fetch Tradier expirations for %s: %s", symbol, exc)
+        return {"status": "error"}
+
+    if not dates:
+        return {"status": "unavailable"}
+    if isinstance(dates, str):
+        dates = [dates]
+
+    nearest_expiry = dates[0]
+
+    try:
+        chain_response = requests.get(
+            f"{TRADIER_BASE_URL}/markets/options/chains",
+            params={"symbol": tradier_symbol, "expiration": nearest_expiry},
+            headers=headers,
+            timeout=10,
+        )
+        chain_response.raise_for_status()
+        contracts = (chain_response.json().get("options") or {}).get("option") or []
+    except Exception as exc:
+        app.logger.warning("Failed to fetch Tradier option chain for %s: %s", symbol, exc)
+        return {"status": "error"}
+
+    calls = _tradier_contracts_to_frame(contracts, "call")
+    puts = _tradier_contracts_to_frame(contracts, "put")
+
+    return {"status": "ok", "expiration": nearest_expiry, "calls": calls, "puts": puts}
+
+
+def _tradier_contracts_to_frame(contracts, option_type):
+    rows = [c for c in contracts if c.get("option_type") == option_type]
+    df = pd.DataFrame(rows)
+    if df.empty:
+        return df
+    return df.rename(columns={"last": "lastPrice", "open_interest": "openInterest"})
 
 
 def _nearest_strikes(df, current_price, count):
