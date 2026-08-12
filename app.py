@@ -5,11 +5,8 @@ Usage:
     (open http://localhost:5000)
 """
 
-import os
 import time
 
-import pandas as pd
-import requests
 import yfinance as yf
 from flask import Flask, jsonify, render_template, request
 
@@ -27,23 +24,13 @@ INDICES = [
 
 NEWS_LIMIT = 5
 
-# Option chains come from Tradier instead of Yahoo/yfinance, whose unofficial
-# options endpoint rate-limits aggressively on shared hosting IPs (see PR #9).
-# Sandbox is free (15-min delayed) and needs no funded account -- sign up at
-# https://tradier.com, generate a sandbox token, and set TRADIER_API_TOKEN.
-# With no token configured, the options section just reports "unavailable"
-# rather than erroring.
-TRADIER_API_TOKEN = os.environ.get("TRADIER_API_TOKEN")
-TRADIER_BASE_URL = os.environ.get("TRADIER_BASE_URL", "https://sandbox.tradier.com/v1")
-
-# Yahoo Finance (via yfinance) rate-limits aggressively, especially the options
-# endpoint. Every route below is cached in-process for a short TTL so repeated
-# clicks/refreshes reuse the same data instead of hammering Yahoo on every request.
+# Yahoo Finance (via yfinance) rate-limits aggressively. Every route below is
+# cached in-process for a short TTL so repeated clicks/refreshes reuse the
+# same data instead of hammering Yahoo on every request.
 _CACHE = {}
 QUOTE_CACHE_TTL = 30
 DETAIL_CACHE_TTL = 300
 HISTORY_CACHE_TTL = 60
-OPTIONS_CACHE_TTL = 300
 
 
 def _cache_get(key):
@@ -218,121 +205,7 @@ def index_detail(symbol):
         "prev_close": round(prev_close, 2),
         "change": round(close - prev_close, 2),
         "change_pct": round(pct_change, 2),
-        "options": fetch_options_summary(meta["symbol"], close),
     })
-
-
-def fetch_options_summary(symbol, current_price, strikes_per_side=5):
-    """Return the nearest-expiry option chain narrowed to strikes closest to current_price.
-
-    The result always has a "status": "ok" once a chain was fetched, "unavailable" when
-    the ticker genuinely has no listed options (common for raw index tickers like
-    ^IXIC/^NDX), or "error" when the yfinance lookup itself failed (network hiccup,
-    Yahoo rate limit, etc.) -- distinct from "unavailable" so the UI and logs don't
-    misreport a transient failure as "this index has no options".
-
-    The Yahoo fetch itself is cached by symbol alone (see _cached_raw_option_chain);
-    narrowing to strikes near current_price is cheap and always recomputed so a
-    fluctuating price never bypasses the cache.
-    """
-    raw = _cached_raw_option_chain(symbol)
-    if raw["status"] != "ok":
-        return {"status": raw["status"]}
-
-    return {
-        "status": "ok",
-        "expiration": raw["expiration"],
-        "calls": _nearest_strikes(raw["calls"], current_price, strikes_per_side),
-        "puts": _nearest_strikes(raw["puts"], current_price, strikes_per_side),
-    }
-
-
-def _cached_raw_option_chain(symbol):
-    key = ("option_chain", symbol)
-    cached = _cache_get(key)
-    if cached is not None:
-        return cached
-
-    result = _fetch_tradier_option_chain(symbol)
-    _cache_set(key, result, OPTIONS_CACHE_TTL)
-    return result
-
-
-def _fetch_tradier_option_chain(symbol):
-    """Fetch the nearest-expiry option chain for symbol from Tradier.
-
-    Tradier symbols drop Yahoo's "^" index prefix (e.g. "VIX", not "^VIX").
-    Returns {"status": "unavailable"} with no API call at all when no token is
-    configured, so this degrades cleanly rather than erroring on every request.
-    """
-    if not TRADIER_API_TOKEN:
-        return {"status": "unavailable"}
-
-    tradier_symbol = symbol.lstrip("^")
-    headers = {"Authorization": f"Bearer {TRADIER_API_TOKEN}", "Accept": "application/json"}
-
-    try:
-        exp_response = requests.get(
-            f"{TRADIER_BASE_URL}/markets/options/expirations",
-            params={"symbol": tradier_symbol},
-            headers=headers,
-            timeout=10,
-        )
-        exp_response.raise_for_status()
-        dates = (exp_response.json().get("expirations") or {}).get("date")
-    except Exception as exc:
-        app.logger.warning("Failed to fetch Tradier expirations for %s: %s", symbol, exc)
-        return {"status": "error"}
-
-    if not dates:
-        return {"status": "unavailable"}
-    if isinstance(dates, str):
-        dates = [dates]
-
-    nearest_expiry = dates[0]
-
-    try:
-        chain_response = requests.get(
-            f"{TRADIER_BASE_URL}/markets/options/chains",
-            params={"symbol": tradier_symbol, "expiration": nearest_expiry},
-            headers=headers,
-            timeout=10,
-        )
-        chain_response.raise_for_status()
-        contracts = (chain_response.json().get("options") or {}).get("option") or []
-    except Exception as exc:
-        app.logger.warning("Failed to fetch Tradier option chain for %s: %s", symbol, exc)
-        return {"status": "error"}
-
-    calls = _tradier_contracts_to_frame(contracts, "call")
-    puts = _tradier_contracts_to_frame(contracts, "put")
-
-    return {"status": "ok", "expiration": nearest_expiry, "calls": calls, "puts": puts}
-
-
-def _tradier_contracts_to_frame(contracts, option_type):
-    rows = [c for c in contracts if c.get("option_type") == option_type]
-    df = pd.DataFrame(rows)
-    if df.empty:
-        return df
-    return df.rename(columns={"last": "lastPrice", "open_interest": "openInterest"})
-
-
-def _nearest_strikes(df, current_price, count):
-    if df is None or df.empty:
-        return []
-
-    nearest = df.assign(_diff=(df["strike"] - current_price).abs()).nsmallest(count, "_diff").sort_values("strike")
-
-    rows = []
-    for row in nearest.itertuples():
-        rows.append({
-            "strike": round(float(row.strike), 2),
-            "last_price": None if pd.isna(row.lastPrice) else round(float(row.lastPrice), 2),
-            "volume": None if pd.isna(row.volume) else int(row.volume),
-            "open_interest": None if pd.isna(row.openInterest) else int(row.openInterest),
-        })
-    return rows
 
 
 @app.route("/api/quote/<ticker>")

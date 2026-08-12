@@ -6,21 +6,6 @@ import pandas as pd
 import app
 
 
-class FakeResponse:
-    """Minimal stand-in for requests.Response used to mock Tradier API calls."""
-
-    def __init__(self, json_data, status_code=200):
-        self._json_data = json_data
-        self.status_code = status_code
-
-    def json(self):
-        return self._json_data
-
-    def raise_for_status(self):
-        if self.status_code >= 400:
-            raise RuntimeError(f"HTTP {self.status_code}")
-
-
 class DashboardAppTests(unittest.TestCase):
     def setUp(self):
         self.client = app.app.test_client()
@@ -284,77 +269,17 @@ class DashboardAppTests(unittest.TestCase):
 
         self.assertEqual(mock_get_change.call_count, 2)
 
-    def test_cached_raw_option_chain_reused_across_different_prices(self):
-        exp_response = FakeResponse({"expirations": {"date": ["2026-08-15"]}})
-        chain_response = FakeResponse({"options": {"option": [
-            {"strike": 19.0, "last": 2.1, "volume": 100, "open_interest": 500, "option_type": "call"},
-            {"strike": 20.0, "last": 1.5, "volume": 200, "open_interest": 600, "option_type": "call"},
-            {"strike": 19.0, "last": 0.2, "volume": 80, "open_interest": 300, "option_type": "put"},
-            {"strike": 20.0, "last": 0.5, "volume": 90, "open_interest": 350, "option_type": "put"},
-        ]}})
-
-        with patch.object(app, "TRADIER_API_TOKEN", "test-token"), \
-             patch("app.requests.get", side_effect=[exp_response, chain_response]) as mock_get:
-            app.fetch_options_summary("^VIX", 19.5)
-            app.fetch_options_summary("^VIX", 20.1)
-
-        # expirations + chain should only be fetched once (2 calls total) even
-        # though the price used for narrowing strikes differed between calls.
-        self.assertEqual(mock_get.call_count, 2)
-
-    def test_fetch_options_summary_returns_unavailable_without_token(self):
-        with patch.object(app, "TRADIER_API_TOKEN", None), \
-             patch("app.requests.get") as mock_get:
-            result = app.fetch_options_summary("^VIX", 20.0)
-
-        self.assertEqual(result, {"status": "unavailable"})
-        mock_get.assert_not_called()
-
-    def test_index_detail_returns_ohlc_and_options(self):
+    def test_index_detail_returns_ohlc(self):
         fake_result = ("2026-08-05", 18.0, 22.0, 17.5, 21.0, 18.0, 16.67)
-        exp_response = FakeResponse({"expirations": {"date": ["2026-08-15"]}})
-        contracts = (
-            [
-                {"strike": s, "last": p, "volume": v, "open_interest": oi, "option_type": "call"}
-                for s, p, v, oi in [
-                    (19.0, 2.1, 100, 500), (20.0, 1.5, 200, 600), (21.0, 1.0, 300, 700),
-                    (22.0, 0.6, 150, 400), (23.0, 0.3, 50, 200), (24.0, 0.1, 10, 100),
-                ]
-            ]
-            + [
-                {"strike": s, "last": p, "volume": v, "open_interest": oi, "option_type": "put"}
-                for s, p, v, oi in [(19.0, 0.2, 80, 300), (20.0, 0.5, 90, 350), (21.0, 0.9, 60, 250)]
-            ]
-        )
-        chain_response = FakeResponse({"options": {"option": contracts}})
 
-        with patch("app.get_change", return_value=fake_result), \
-             patch.object(app, "TRADIER_API_TOKEN", "test-token"), \
-             patch("app.requests.get", side_effect=[exp_response, chain_response]):
+        with patch("app.get_change", return_value=fake_result):
             response = self.client.get("/api/index/%5EVIX")
             data = response.get_json()
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(data["symbol"], "^VIX")
         self.assertEqual(data["close"], 21.0)
-        self.assertEqual(data["options"]["status"], "ok")
-        self.assertEqual(data["options"]["expiration"], "2026-08-15")
-        self.assertEqual(len(data["options"]["calls"]), 5)
-        self.assertEqual(len(data["options"]["puts"]), 3)
-        # nearest-to-price (21.0) strike should be first after sorting by strike
-        self.assertEqual(data["options"]["calls"][0]["strike"], 19.0)
-
-    def test_index_detail_handles_no_options(self):
-        fake_result = ("2026-08-05", 15000.0, 15100.0, 14900.0, 14950.0, 15100.0, -0.99)
-
-        # No TRADIER_API_TOKEN configured -> options are reported unavailable
-        # without any outbound request at all.
-        with patch("app.get_change", return_value=fake_result):
-            response = self.client.get("/api/index/%5EIXIC")
-            data = response.get_json()
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(data["options"], {"status": "unavailable"})
+        self.assertNotIn("options", data)
 
     def test_index_detail_unknown_symbol_returns_404(self):
         response = self.client.get("/api/index/FAKE")
@@ -366,25 +291,6 @@ class DashboardAppTests(unittest.TestCase):
             data = response.get_json()
 
         self.assertEqual(data["error"], "no data")
-
-    def test_fetch_options_summary_handles_expirations_exception(self):
-        with patch.object(app, "TRADIER_API_TOKEN", "test-token"), \
-             patch("app.requests.get", side_effect=RuntimeError("network error")):
-            self.assertEqual(app.fetch_options_summary("^VIX", 20.0), {"status": "error"})
-
-    def test_fetch_options_summary_handles_no_expirations(self):
-        exp_response = FakeResponse({"expirations": None})
-
-        with patch.object(app, "TRADIER_API_TOKEN", "test-token"), \
-             patch("app.requests.get", return_value=exp_response):
-            self.assertEqual(app.fetch_options_summary("^VIX", 20.0), {"status": "unavailable"})
-
-    def test_fetch_options_summary_handles_chain_lookup_exception(self):
-        exp_response = FakeResponse({"expirations": {"date": ["2026-08-15"]}})
-
-        with patch.object(app, "TRADIER_API_TOKEN", "test-token"), \
-             patch("app.requests.get", side_effect=[exp_response, RuntimeError("rate limited")]):
-            self.assertEqual(app.fetch_options_summary("^VIX", 20.0), {"status": "error"})
 
 
 if __name__ == "__main__":
