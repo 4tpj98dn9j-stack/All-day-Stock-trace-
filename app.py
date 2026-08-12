@@ -7,7 +7,7 @@ Usage:
 
 import pandas as pd
 import yfinance as yf
-from flask import Flask, jsonify, render_template
+from flask import Flask, jsonify, render_template, request
 
 from daily_change_tracker import get_change
 
@@ -22,6 +22,9 @@ INDICES = [
 ]
 
 NEWS_LIMIT = 5
+
+CHART_RANGES = {"1mo", "3mo", "6mo", "1y"}
+DEFAULT_CHART_RANGE = "3mo"
 
 
 @app.route("/")
@@ -234,6 +237,30 @@ def quote_detail(ticker):
         "change_pct": round(pct_change, 2),
         "news": fetch_news(ticker),
     })
+
+
+@app.route("/api/quote/<ticker>/history")
+def quote_history(ticker):
+    ticker = ticker.upper()
+    if ticker not in TICKERS:
+        return jsonify({"error": "unknown ticker"}), 404
+
+    range_param = request.args.get("range", DEFAULT_CHART_RANGE)
+    if range_param not in CHART_RANGES:
+        return jsonify({"error": "invalid range"}), 400
+
+    try:
+        history = yf.Ticker(ticker).history(period=range_param, auto_adjust=True)
+        history = history.dropna(subset=["Close"])
+    except Exception as exc:
+        app.logger.warning("Failed to fetch chart history for %s (%s): %s", ticker, range_param, exc)
+        return jsonify({"ticker": ticker, "range": range_param, "points": []})
+
+    points = [
+        {"date": idx.strftime("%Y-%m-%d"), "close": round(float(close), 2)}
+        for idx, close in history["Close"].items()
+    ]
+    return jsonify({"ticker": ticker, "range": range_param, "points": points})
 
 
 def fetch_news(ticker):

@@ -1,3 +1,11 @@
+const CHART_RANGES = [
+  { value: "1mo", label: "1개월" },
+  { value: "3mo", label: "3개월" },
+  { value: "6mo", label: "6개월" },
+  { value: "1y", label: "1년" },
+];
+const DEFAULT_CHART_RANGE = "3mo";
+
 function escapeHtml(str) {
   const div = document.createElement("div");
   div.textContent = str ?? "";
@@ -150,6 +158,18 @@ async function openDetail(ticker) {
       : `<div class="news-list"><h3>최근 뉴스</h3><p>표시할 뉴스가 없습니다.</p></div>`;
 
     body.innerHTML = `
+      <div class="chart-section">
+        <div class="chart-range-buttons">
+          ${CHART_RANGES.map((r) => `
+            <button type="button" class="range-btn${r.value === DEFAULT_CHART_RANGE ? " active" : ""}" data-range="${r.value}">${r.label}</button>
+          `).join("")}
+        </div>
+        <canvas class="detail-chart"></canvas>
+        <div class="chart-meta">
+          <span class="chart-meta-low"></span>
+          <span class="chart-meta-high"></span>
+        </div>
+      </div>
       <div class="detail-grid">
         <div><div class="label">현재가</div><div class="value">$${data.close.toFixed(2)}</div></div>
         <div><div class="label">전일 종가</div><div class="value">$${data.prev_close.toFixed(2)}</div></div>
@@ -160,9 +180,104 @@ async function openDetail(ticker) {
       </div>
       ${newsHtml}
     `;
+
+    setupChart(ticker, body);
   } catch (err) {
     body.innerHTML = "<p>상세 정보를 불러올 수 없습니다.</p>";
   }
+}
+
+function setupChart(ticker, container) {
+  const buttons = container.querySelectorAll(".range-btn");
+  buttons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      buttons.forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      loadChart(ticker, btn.dataset.range, container);
+    });
+  });
+  loadChart(ticker, DEFAULT_CHART_RANGE, container);
+}
+
+async function loadChart(ticker, range, container) {
+  const canvas = container.querySelector(".detail-chart");
+  const lowEl = container.querySelector(".chart-meta-low");
+  const highEl = container.querySelector(".chart-meta-high");
+
+  lowEl.textContent = "";
+  highEl.textContent = "";
+  drawLineChart(canvas, null);
+
+  try {
+    const res = await fetch(`/api/quote/${encodeURIComponent(ticker)}/history?range=${encodeURIComponent(range)}`);
+    const data = await res.json();
+    const points = (res.ok && data.points) ? data.points : [];
+
+    drawLineChart(canvas, points);
+
+    if (points.length > 0) {
+      const closes = points.map((p) => p.close);
+      const min = Math.min(...closes);
+      const max = Math.max(...closes);
+      lowEl.textContent = `저 $${min.toFixed(2)} (${points[0].date})`;
+      highEl.textContent = `고 $${max.toFixed(2)} (${points[points.length - 1].date})`;
+    }
+  } catch (err) {
+    drawLineChart(canvas, null);
+  }
+}
+
+function drawLineChart(canvas, points) {
+  const ctx = canvas.getContext("2d");
+  const dpr = window.devicePixelRatio || 1;
+  const width = canvas.clientWidth || 300;
+  const height = canvas.clientHeight || 140;
+
+  canvas.width = width * dpr;
+  canvas.height = height * dpr;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, width, height);
+
+  if (!points || points.length < 2) {
+    ctx.fillStyle = "#999";
+    ctx.font = "13px -apple-system, sans-serif";
+    ctx.fillText("차트 데이터를 불러오는 중...", 10, height / 2);
+    return;
+  }
+
+  const closes = points.map((p) => p.close);
+  const min = Math.min(...closes);
+  const max = Math.max(...closes);
+  const range = max - min || 1;
+  const padding = 8;
+  const isUp = closes[closes.length - 1] >= closes[0];
+  const lineColor = isUp ? "#e53935" : "#1e88e5";
+  const fillColor = isUp ? "rgba(229, 57, 53, 0.12)" : "rgba(30, 136, 229, 0.12)";
+
+  const stepX = (width - padding * 2) / (points.length - 1);
+  const toY = (price) => height - padding - ((price - min) / range) * (height - padding * 2);
+
+  ctx.beginPath();
+  points.forEach((p, i) => {
+    const x = padding + i * stepX;
+    const y = toY(p.close);
+    if (i === 0) {
+      ctx.moveTo(x, y);
+    } else {
+      ctx.lineTo(x, y);
+    }
+  });
+  ctx.strokeStyle = lineColor;
+  ctx.lineWidth = 2;
+  ctx.lineJoin = "round";
+  ctx.stroke();
+
+  ctx.lineTo(padding + (points.length - 1) * stepX, height - padding);
+  ctx.lineTo(padding, height - padding);
+  ctx.closePath();
+  ctx.fillStyle = fillColor;
+  ctx.fill();
 }
 
 function renderOptionsRows(rows) {
