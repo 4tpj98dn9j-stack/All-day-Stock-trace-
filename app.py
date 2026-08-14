@@ -22,9 +22,6 @@ INDICES = [
     {"symbol": "^VIX", "name": "VIX"},
 ]
 
-SP500_SYMBOL = "^GSPC"
-SP500_CHART_RANGE = "10y"
-
 NEWS_LIMIT = 5
 
 # Yahoo Finance (via yfinance) rate-limits aggressively. Every route below is
@@ -101,12 +98,6 @@ DEFAULT_CHART_RANGE = "3mo"
 @app.route("/")
 def index():
     return render_template("index.html")
-
-
-@app.route("/api/sp500-chart")
-def sp500_chart():
-    points = _cached_chart_points(SP500_SYMBOL, SP500_CHART_RANGE, CHART_RANGES[SP500_CHART_RANGE])
-    return jsonify({"symbol": SP500_SYMBOL, "range": SP500_CHART_RANGE, "points": points})
 
 
 @app.route("/api/quotes")
