@@ -102,35 +102,6 @@ async function loadMarketSummary() {
   }
 }
 
-async function loadSp500Chart() {
-  const canvas = document.getElementById("sp500-chart");
-  const lowEl = document.getElementById("sp500-low");
-  const highEl = document.getElementById("sp500-high");
-
-  try {
-    const res = await fetch("/api/sp500-chart");
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status}`);
-    }
-    const data = await res.json();
-    const points = data.points || [];
-
-    drawLineChart(canvas, points);
-
-    if (points.length > 0) {
-      const closes = points.map((p) => p.close);
-      const min = Math.min(...closes);
-      const max = Math.max(...closes);
-      lowEl.textContent = `저 ${min.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (${points[0].date})`;
-      highEl.textContent = `고 ${max.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (${points[points.length - 1].date})`;
-    }
-  } catch (err) {
-    drawLineChart(canvas, null);
-    lowEl.textContent = "";
-    highEl.textContent = "";
-  }
-}
-
 async function loadQuotes() {
   const cardsEl = document.getElementById("cards");
   const updatedEl = document.getElementById("updated-at");
@@ -180,7 +151,7 @@ async function refreshAll() {
   btn.textContent = "불러오는 중...";
 
   try {
-    await Promise.all([loadMarketSummary(), loadQuotes(), loadSp500Chart()]);
+    await Promise.all([loadMarketSummary(), loadQuotes()]);
   } finally {
     btn.disabled = false;
     btn.textContent = "새로고침";

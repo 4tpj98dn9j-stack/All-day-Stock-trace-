@@ -15,32 +15,6 @@ class DashboardAppTests(unittest.TestCase):
         response = self.client.get("/")
         self.assertEqual(response.status_code, 200)
 
-    def test_sp500_chart_returns_points(self):
-        idx = pd.date_range("2016-08-01", periods=3, freq="W", tz="America/New_York")
-        fake_history = pd.DataFrame({"Close": [2170.0, 2180.5, 2175.25]}, index=idx)
-        mock_ticker = MagicMock()
-        mock_ticker.history.return_value = fake_history
-
-        with patch("app.yf.Ticker", return_value=mock_ticker) as mock_ticker_ctor:
-            response = self.client.get("/api/sp500-chart")
-            data = response.get_json()
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(data["symbol"], "^GSPC")
-        self.assertEqual(data["range"], "10y")
-        self.assertEqual(len(data["points"]), 3)
-        self.assertEqual(data["points"][0]["close"], 2170.0)
-        mock_ticker_ctor.assert_called_once_with("^GSPC")
-        mock_ticker.history.assert_called_once_with(period="10y", interval="1wk", auto_adjust=True)
-
-    def test_sp500_chart_handles_exceptions(self):
-        with patch("app.yf.Ticker", side_effect=RuntimeError("network error")):
-            response = self.client.get("/api/sp500-chart")
-            data = response.get_json()
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(data["points"], [])
-
     def test_quotes_endpoint_returns_all_tickers(self):
         fake_result = ("2026-08-05", 100.0, 105.0, 99.0, 102.0, 100.0, 2.0)
 
