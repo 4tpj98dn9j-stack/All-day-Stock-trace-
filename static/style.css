@@ -112,6 +112,26 @@ h1 {
   color: #444;
 }
 
+.sp500-section {
+  background: #fff;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.sp500-title {
+  font-size: 0.95rem;
+  margin: 0 0 12px;
+  color: #555;
+}
+
+.sp500-chart {
+  width: 100%;
+  height: 180px;
+  display: block;
+}
+
 .cards {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
