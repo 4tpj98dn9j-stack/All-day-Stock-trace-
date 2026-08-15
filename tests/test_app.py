@@ -1,4 +1,6 @@
+import shutil
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
@@ -14,6 +16,47 @@ class DashboardAppTests(unittest.TestCase):
     def test_index_returns_200(self):
         response = self.client.get("/")
         self.assertEqual(response.status_code, 200)
+
+    def test_daily_report_endpoint_returns_latest_file(self):
+        test_dir = Path("/tmp/test_daily_report_dir")
+        shutil.rmtree(test_dir, ignore_errors=True)
+        test_dir.mkdir()
+        (test_dir / "2026-08-14.md").write_text("# older report", encoding="utf-8")
+        (test_dir / "2026-08-15.md").write_text("# newest report", encoding="utf-8")
+
+        try:
+            with patch.object(app, "DAILY_REPORT_DIR", test_dir):
+                response = self.client.get("/api/daily-report")
+                data = response.get_json()
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(data["date"], "2026-08-15")
+            self.assertEqual(data["content"], "# newest report")
+        finally:
+            shutil.rmtree(test_dir, ignore_errors=True)
+
+    def test_daily_report_endpoint_handles_missing_directory(self):
+        with patch.object(app, "DAILY_REPORT_DIR", Path("/tmp/does-not-exist-daily-report-dir")):
+            response = self.client.get("/api/daily-report")
+            data = response.get_json()
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(data["error"], "no report")
+
+    def test_daily_report_endpoint_handles_empty_directory(self):
+        test_dir = Path("/tmp/test_daily_report_empty_dir")
+        shutil.rmtree(test_dir, ignore_errors=True)
+        test_dir.mkdir()
+
+        try:
+            with patch.object(app, "DAILY_REPORT_DIR", test_dir):
+                response = self.client.get("/api/daily-report")
+                data = response.get_json()
+
+            self.assertEqual(response.status_code, 404)
+            self.assertEqual(data["error"], "no report")
+        finally:
+            shutil.rmtree(test_dir, ignore_errors=True)
 
     def test_quotes_endpoint_returns_all_tickers(self):
         fake_result = ("2026-08-05", 100.0, 105.0, 99.0, 102.0, 100.0, 2.0)
