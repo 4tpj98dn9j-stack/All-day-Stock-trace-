@@ -43,11 +43,15 @@ class DailyReportTests(unittest.TestCase):
         self.assertIn("# 2026-08-15 마감 리포트", report)
         self.assertIn("나스닥종합지수: 14,950.00 (-0.99%)", report)
         self.assertIn("나스닥 하락 마감", report)
-        self.assertIn("| QCOM | $162.68 | +$1.18 | +0.73% | $178.95 (+10%) |", report)
+        self.assertIn(
+            "| QCOM | $162.68 | +$1.18 | +0.73% | $178.95 (+10%) | $300.00 (+84%) |", report,
+        )
         # regression check: negative change must render as "-$3.00", not "$-3.00"
-        self.assertIn("| NOW | $902.00 | -$3.00 | -0.33% | $950.00 (+5%) |", report)
+        self.assertIn(
+            "| NOW | $902.00 | -$3.00 | -0.33% | $950.00 (+5%) | $180.00 (-80%) |", report,
+        )
         # ticker with no analyst target data falls back to "-"
-        self.assertIn("| TSLA | $302.00 | +$0.50 | +0.17% | - |", report)
+        self.assertIn("| TSLA | $302.00 | +$0.50 | +0.17% | - | $480.00 (+59%) |", report)
         # per-ticker news is intentionally omitted -- redundant with the
         # card-click modal on the dashboard
         self.assertNotIn("종목별 최근 뉴스", report)
@@ -58,7 +62,7 @@ class DailyReportTests(unittest.TestCase):
             report = daily_report.build_report("2026-08-15")
 
         self.assertIn("데이터 없음", report)
-        self.assertIn("| NOW | - | - | - | - |", report)
+        self.assertIn("| NOW | - | - | - | - | - |", report)
 
     def test_main_writes_dated_file(self):
         test_dir = Path("/tmp/daily_report_test_output")
@@ -92,6 +96,17 @@ class DailyReportTests(unittest.TestCase):
     def test_format_target_price_handles_missing_stats(self):
         self.assertEqual(daily_report.format_target_price(100.0, {}), "-")
         self.assertEqual(daily_report.format_target_price(100.0, None), "-")
+
+    def test_format_price_target_computes_upside(self):
+        self.assertEqual(daily_report.format_price_target(100.0, 150.0), "$150.00 (+50%)")
+
+    def test_format_price_target_handles_missing_target(self):
+        self.assertEqual(daily_report.format_price_target(100.0, None), "-")
+
+    def test_personal_targets_cover_every_ticker(self):
+        from app import TICKERS
+        for ticker in TICKERS:
+            self.assertIn(ticker, daily_report.PERSONAL_TARGETS)
 
 
 if __name__ == "__main__":
