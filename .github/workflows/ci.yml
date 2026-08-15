@@ -24,7 +24,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Check syntax
-        run: python -m py_compile fetch_stock_data.py daily_change_tracker.py
+        run: python -m py_compile fetch_stock_data.py daily_change_tracker.py daily_report.py
 
       - name: Run tests
         run: python -m unittest discover -s tests -t . -v

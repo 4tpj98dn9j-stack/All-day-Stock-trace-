@@ -23,6 +23,17 @@ pip install -r requirements.txt
   python app.py
   # http://localhost:5000 접속, 새로고침 버튼으로 시세 갱신
   ```
+- `daily_report.py` — 워치리스트 6종목 시세·뉴스와 나스닥 시황(코멘트 포함)을 마크다운으로 정리해 `daily/<YYYY-MM-DD>.md`로 저장
+  ```bash
+  python daily_report.py
+  ```
+
+## 매일 마감 리포트 자동화
+
+`.github/workflows/daily-report.yml`이 평일 21:30 UTC(미국 나스닥 마감 이후)에 `daily_report.py`를 실행해서 `daily/<날짜>.md`를 자동으로 커밋·푸시합니다. GitHub Actions 러너는 이 저장소의 로컬 개발/CI 환경과 달리 Yahoo Finance에 정상적으로 접속되므로, 이 자동화는 실제 데이터를 안정적으로 가져올 수 있습니다.
+
+- 수동 실행: 저장소 **Actions** 탭 → **Daily Report** → **Run workflow**
+- 스케줄 변경: `.github/workflows/daily-report.yml`의 `cron` 값 수정
 
 ## 테스트
 
