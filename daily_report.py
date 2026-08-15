@@ -54,8 +54,9 @@ def build_report(today):
             continue
         _, _, _, _, close, prev_close, pct_change = result
         change = close - prev_close
-        sign = "+" if pct_change >= 0 else ""
-        lines.append(f"| {ticker} | ${close:,.2f} | {sign}${change:,.2f} | {sign}{pct_change:.2f}% |")
+        change_sign = "+" if change >= 0 else "-"
+        pct_sign = "+" if pct_change >= 0 else ""
+        lines.append(f"| {ticker} | ${close:,.2f} | {change_sign}${abs(change):,.2f} | {pct_sign}{pct_change:.2f}% |")
     lines.append("")
 
     lines.append("## 종목별 최근 뉴스")
