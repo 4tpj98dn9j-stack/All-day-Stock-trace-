@@ -35,12 +35,9 @@ def fake_fetch_stats(ticker):
 
 
 class DailyReportTests(unittest.TestCase):
-    def test_build_report_includes_indices_tickers_and_news(self):
-        fake_news = {"NOW": [{"title": "ServiceNow beats estimates", "link": "https://example.com/now1", "publisher": "Reuters"}]}
-
+    def test_build_report_includes_indices_and_tickers(self):
         with patch("daily_report.get_change", side_effect=fake_get_change), \
-             patch("daily_report.fetch_stats", side_effect=fake_fetch_stats), \
-             patch("daily_report.fetch_news", side_effect=lambda t: fake_news.get(t, [])):
+             patch("daily_report.fetch_stats", side_effect=fake_fetch_stats):
             report = daily_report.build_report("2026-08-15")
 
         self.assertIn("# 2026-08-15 마감 리포트", report)
@@ -51,13 +48,13 @@ class DailyReportTests(unittest.TestCase):
         self.assertIn("| NOW | $902.00 | -$3.00 | -0.33% | $950.00 (+5%) |", report)
         # ticker with no analyst target data falls back to "-"
         self.assertIn("| TSLA | $302.00 | +$0.50 | +0.17% | - |", report)
-        self.assertIn("[ServiceNow beats estimates](https://example.com/now1) (Reuters)", report)
-        self.assertIn("관련 뉴스 없음", report)
+        # per-ticker news is intentionally omitted -- redundant with the
+        # card-click modal on the dashboard
+        self.assertNotIn("종목별 최근 뉴스", report)
 
     def test_build_report_handles_missing_data(self):
         with patch("daily_report.get_change", return_value=None), \
-             patch("daily_report.fetch_stats", return_value={}), \
-             patch("daily_report.fetch_news", return_value=[]):
+             patch("daily_report.fetch_stats", return_value={}):
             report = daily_report.build_report("2026-08-15")
 
         self.assertIn("데이터 없음", report)
@@ -70,7 +67,6 @@ class DailyReportTests(unittest.TestCase):
         with patch("daily_report.OUTPUT_DIR", test_dir), \
              patch("daily_report.get_change", side_effect=fake_get_change), \
              patch("daily_report.fetch_stats", return_value={}), \
-             patch("daily_report.fetch_news", return_value=[]), \
              patch("daily_report.datetime") as mock_datetime:
             mock_datetime.now.return_value.date.return_value.isoformat.return_value = "2026-08-15"
             daily_report.main()

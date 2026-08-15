@@ -1,4 +1,4 @@
-"""Generate a dated markdown report: watchlist prices/news plus a NASDAQ market recap.
+"""Generate a dated markdown report: a NASDAQ market recap plus watchlist prices.
 
 Usage:
     python daily_report.py
@@ -12,10 +12,9 @@ access to Yahoo Finance, unlike this project's other dev/CI sandboxes).
 from datetime import datetime, timezone
 from pathlib import Path
 
-from app import INDICES, TICKERS, build_market_summary, fetch_news, fetch_stats
+from app import INDICES, TICKERS, build_market_summary, fetch_stats
 from daily_change_tracker import get_change
 
-NEWS_PER_TICKER = 2
 OUTPUT_DIR = Path("daily")
 
 
@@ -71,21 +70,6 @@ def build_report(today):
             f"| {ticker} | ${close:,.2f} | {change_sign}${abs(change):,.2f} | "
             f"{pct_sign}{pct_change:.2f}% | {target_text} |"
         )
-    lines.append("")
-
-    lines.append("## 종목별 최근 뉴스")
-    lines.append("")
-    for ticker in TICKERS:
-        lines.append(f"### {ticker}")
-        news_items = fetch_news(ticker)[:NEWS_PER_TICKER]
-        if not news_items:
-            lines.append("- 관련 뉴스 없음")
-        else:
-            for item in news_items:
-                suffix = f" ({item['publisher']})" if item.get("publisher") else ""
-                lines.append(f"- [{item['title']}]({item['link']}){suffix}")
-        lines.append("")
-
     return "\n".join(lines).rstrip() + "\n"
 
 
