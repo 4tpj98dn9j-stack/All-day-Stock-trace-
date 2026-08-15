@@ -11,7 +11,7 @@ FAKE_INDEX_RESULTS = {
     "^VIX": ("2026-08-15", 18.0, 22.0, 17.5, 21.0, 18.0, 16.67),
 }
 FAKE_TICKER_RESULTS = {
-    "NOW": ("2026-08-15", 900.0, 905.0, 895.0, 902.0, 901.5, 0.06),
+    "NOW": ("2026-08-15", 900.0, 905.0, 895.0, 902.0, 905.0, -0.33),
     "TSLA": ("2026-08-15", 300.0, 305.0, 298.0, 302.0, 301.5, 0.17),
     "SPCX": ("2026-08-15", 114.0, 116.0, 113.0, 116.0, 115.5, 0.43),
     "INFQ": ("2026-08-15", 11.5, 12.0, 11.2, 11.9, 11.8, 0.85),
@@ -36,6 +36,8 @@ class DailyReportTests(unittest.TestCase):
         self.assertIn("나스닥종합지수: 14,950.00 (-0.99%)", report)
         self.assertIn("나스닥 하락 마감", report)
         self.assertIn("| QCOM | $162.68 | +$1.18 | +0.73% |", report)
+        # regression check: negative change must render as "-$3.00", not "$-3.00"
+        self.assertIn("| NOW | $902.00 | -$3.00 | -0.33% |", report)
         self.assertIn("[ServiceNow beats estimates](https://example.com/now1) (Reuters)", report)
         self.assertIn("관련 뉴스 없음", report)
 
