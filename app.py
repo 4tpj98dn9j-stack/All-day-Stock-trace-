@@ -6,6 +6,7 @@ Usage:
 """
 
 import time
+from pathlib import Path
 
 import yfinance as yf
 from flask import Flask, jsonify, render_template, request
@@ -21,6 +22,8 @@ INDICES = [
     {"symbol": "^NDX", "name": "나스닥100"},
     {"symbol": "^VIX", "name": "VIX"},
 ]
+
+DAILY_REPORT_DIR = Path("daily")
 
 NEWS_LIMIT = 5
 
@@ -98,6 +101,26 @@ DEFAULT_CHART_RANGE = "3mo"
 @app.route("/")
 def index():
     return render_template("index.html")
+
+
+@app.route("/api/daily-report")
+def daily_report_endpoint():
+    """Return the most recently committed daily/<date>.md report (see daily_report.py)."""
+    if not DAILY_REPORT_DIR.is_dir():
+        return jsonify({"error": "no report"}), 404
+
+    files = sorted(DAILY_REPORT_DIR.glob("*.md"))
+    if not files:
+        return jsonify({"error": "no report"}), 404
+
+    latest = files[-1]
+    try:
+        content = latest.read_text(encoding="utf-8")
+    except Exception as exc:
+        app.logger.warning("Failed to read daily report %s: %s", latest, exc)
+        return jsonify({"error": "no report"}), 404
+
+    return jsonify({"date": latest.stem, "content": content})
 
 
 @app.route("/api/quotes")

@@ -59,6 +59,109 @@ function isSafeHttpUrl(url) {
   }
 }
 
+function linkifyInline(text) {
+  // Renders "[label](url)" as a safe <a>; everything else is HTML-escaped.
+  const pattern = /\[([^\]]+)\]\(([^)]+)\)/g;
+  let result = "";
+  let lastIndex = 0;
+  let match;
+  while ((match = pattern.exec(text)) !== null) {
+    result += escapeHtml(text.slice(lastIndex, match.index));
+    const [, label, url] = match;
+    result += isSafeHttpUrl(url)
+      ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(label)}</a>`
+      : escapeHtml(label);
+    lastIndex = pattern.lastIndex;
+  }
+  result += escapeHtml(text.slice(lastIndex));
+  return result;
+}
+
+function renderReportMarkdown(text) {
+  // Minimal renderer tailored to daily_report.py's fixed output shape
+  // (#/##/### headers, "> " quote, "| a | b |" tables, "- " list items,
+  // "[label](url)" links) -- not a general Markdown parser.
+  const parts = [];
+  let tableBuffer = [];
+  let listBuffer = [];
+
+  const flushTable = () => {
+    if (tableBuffer.length === 0) return;
+    const rows = tableBuffer.filter((row) => !/^\|[\s-:|]+\|$/.test(row));
+    const cellsOf = (row) => row.slice(1, -1).split("|").map((c) => c.trim());
+    const [headerRow, ...bodyRows] = rows;
+    if (headerRow) {
+      let table = '<table class="report-table"><thead><tr>';
+      cellsOf(headerRow).forEach((c) => { table += `<th>${escapeHtml(c)}</th>`; });
+      table += "</tr></thead><tbody>";
+      bodyRows.forEach((row) => {
+        table += "<tr>";
+        cellsOf(row).forEach((c) => { table += `<td>${linkifyInline(c)}</td>`; });
+        table += "</tr>";
+      });
+      table += "</tbody></table>";
+      parts.push(table);
+    }
+    tableBuffer = [];
+  };
+
+  const flushList = () => {
+    if (listBuffer.length === 0) return;
+    parts.push(`<ul>${listBuffer.map((item) => `<li>${linkifyInline(item)}</li>`).join("")}</ul>`);
+    listBuffer = [];
+  };
+
+  text.split("\n").forEach((rawLine) => {
+    const line = rawLine.trim();
+
+    if (line.startsWith("|")) {
+      tableBuffer.push(line);
+      return;
+    }
+    flushTable();
+
+    if (line.startsWith("- ")) {
+      listBuffer.push(line.slice(2));
+      return;
+    }
+    flushList();
+
+    if (line.startsWith("### ")) {
+      parts.push(`<h4>${escapeHtml(line.slice(4))}</h4>`);
+    } else if (line.startsWith("## ")) {
+      parts.push(`<h3>${escapeHtml(line.slice(3))}</h3>`);
+    } else if (line.startsWith("# ")) {
+      parts.push(`<h2>${escapeHtml(line.slice(2))}</h2>`);
+    } else if (line.startsWith("> ")) {
+      parts.push(`<p class="report-quote">${linkifyInline(line.slice(2))}</p>`);
+    } else if (line !== "") {
+      parts.push(`<p>${linkifyInline(line)}</p>`);
+    }
+  });
+  flushTable();
+  flushList();
+
+  return parts.join("\n");
+}
+
+async function loadDailyReport() {
+  const dateEl = document.getElementById("daily-report-date");
+  const contentEl = document.getElementById("daily-report-content");
+
+  try {
+    const res = await fetch("/api/daily-report");
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    dateEl.textContent = data.date;
+    contentEl.innerHTML = renderReportMarkdown(data.content);
+  } catch (err) {
+    dateEl.textContent = "";
+    contentEl.innerHTML = `<p class="error">아직 생성된 리포트가 없습니다.</p>`;
+  }
+}
+
 async function loadMarketSummary() {
   const indicesEl = document.getElementById("market-indices");
   const commentEl = document.getElementById("market-comment");
@@ -151,7 +254,7 @@ async function refreshAll() {
   btn.textContent = "불러오는 중...";
 
   try {
-    await Promise.all([loadMarketSummary(), loadQuotes()]);
+    await Promise.all([loadMarketSummary(), loadQuotes(), loadDailyReport()]);
   } finally {
     btn.disabled = false;
     btn.textContent = "새로고침";
