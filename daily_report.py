@@ -12,11 +12,21 @@ access to Yahoo Finance, unlike this project's other dev/CI sandboxes).
 from datetime import datetime, timezone
 from pathlib import Path
 
-from app import INDICES, TICKERS, build_market_summary, fetch_news
+from app import INDICES, TICKERS, build_market_summary, fetch_news, fetch_stats
 from daily_change_tracker import get_change
 
 NEWS_PER_TICKER = 2
 OUTPUT_DIR = Path("daily")
+
+
+def format_target_price(close, stats):
+    """Format analyst consensus target price with upside/downside vs. close, e.g. "$140.25 (+13%)"."""
+    target = stats.get("target_mean_price") if stats else None
+    if target is None:
+        return "-"
+    upside_pct = (target - close) / close * 100
+    sign = "+" if upside_pct >= 0 else ""
+    return f"${target:,.2f} ({sign}{upside_pct:.0f}%)"
 
 
 def build_report(today):
@@ -45,18 +55,22 @@ def build_report(today):
 
     lines.append("## 보유 종목 시세")
     lines.append("")
-    lines.append("| 종목 | 종가 | 전일 대비 | 등락률 |")
-    lines.append("| --- | --- | --- | --- |")
+    lines.append("| 종목 | 종가 | 전일 대비 | 등락률 | 목표주가(컨센서스) |")
+    lines.append("| --- | --- | --- | --- | --- |")
     for ticker in TICKERS:
         result = get_change(ticker)
         if result is None:
-            lines.append(f"| {ticker} | - | - | - |")
+            lines.append(f"| {ticker} | - | - | - | - |")
             continue
         _, _, _, _, close, prev_close, pct_change = result
         change = close - prev_close
         change_sign = "+" if change >= 0 else "-"
         pct_sign = "+" if pct_change >= 0 else ""
-        lines.append(f"| {ticker} | ${close:,.2f} | {change_sign}${abs(change):,.2f} | {pct_sign}{pct_change:.2f}% |")
+        target_text = format_target_price(close, fetch_stats(ticker))
+        lines.append(
+            f"| {ticker} | ${close:,.2f} | {change_sign}${abs(change):,.2f} | "
+            f"{pct_sign}{pct_change:.2f}% | {target_text} |"
+        )
     lines.append("")
 
     lines.append("## 종목별 최근 뉴스")

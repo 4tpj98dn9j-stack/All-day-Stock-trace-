@@ -209,6 +209,8 @@ class DashboardAppTests(unittest.TestCase):
             "fiftyTwoWeekHigh": 300.0,
             "fiftyTwoWeekLow": 180.0,
             "averageVolume": 12_000_000,
+            "targetMeanPrice": 210.5,
+            "numberOfAnalystOpinions": 24,
             "someOtherField": "ignored",
         }
 
@@ -223,6 +225,8 @@ class DashboardAppTests(unittest.TestCase):
             "week52_high": 300.0,
             "week52_low": 180.0,
             "avg_volume": 12_000_000,
+            "target_mean_price": 210.5,
+            "analyst_count": 24,
         })
 
     def test_fetch_stats_defaults_missing_fields_to_none(self):
