@@ -31,22 +31,63 @@ FRED_API_URL = "https://api.stlouisfed.org/fred/series/observations"
 OUTPUT_PATH = Path("data/macro.json")
 
 MACRO_SERIES = [
+    # 금리 / 커브
     {"id": "DGS10", "name": "10년물 국채금리", "prefix": "", "unit": "%"},
+    {"id": "DGS2", "name": "2년물 국채금리", "prefix": "", "unit": "%"},
+    {"id": "DGS3MO", "name": "3개월물 국채금리", "prefix": "", "unit": "%"},
+    # Spreads FRED computes directly; can go negative (yield-curve inversion).
+    {"id": "T10Y2Y", "name": "장단기 스프레드(10Y-2Y)", "prefix": "", "unit": "%"},
+    {"id": "T10Y3M", "name": "장단기 스프레드(10Y-3M)", "prefix": "", "unit": "%"},
+    {"id": "DFII10", "name": "10년 실질금리(TIPS)", "prefix": "", "unit": "%"},
+    {"id": "SOFR", "name": "SOFR(익일물 담보금리)", "prefix": "", "unit": "%"},
+    {"id": "DFF", "name": "연방기금 실효금리(일별)", "prefix": "", "unit": "%"},
     {"id": "FEDFUNDS", "name": "연방기금금리", "prefix": "", "unit": "%"},
     # CPIAUCSL is a raw index level (~310-320), not very readable on its own,
     # so this is shown as a year-over-year % change (the usual "CPI" headline
     # number) instead of the level.
     {"id": "CPIAUCSL", "name": "CPI(전년동월비)", "prefix": "", "unit": "%", "transform": "yoy"},
+
+    # 유동성
+    # WALCL is in millions of USD; scaled down to trillions for readability.
+    # history_count also stores ~5 years of weekly points (this series
+    # updates every Wednesday) so the dashboard can chart it over time.
+    {"id": "WALCL", "name": "Fed 대차대조표 총자산", "prefix": "$", "unit": "T", "scale": 1e-6, "history_count": 260},
+    {"id": "RRPONTSYD", "name": "역레포(ON RRP) 잔고", "prefix": "$", "unit": "B"},
+    # WRESBAL is in billions of USD; scaled to trillions for readability.
+    {"id": "WRESBAL", "name": "은행 지준 잔고", "prefix": "$", "unit": "T", "scale": 1e-3},
+    # M2SL is in billions of USD; scaled to trillions for readability.
+    {"id": "M2SL", "name": "통화량(M2)", "prefix": "$", "unit": "T", "scale": 1e-3},
     # FRED has no series scoped purely to "Standing Repo Facility" usage.
     # RPONTSYD (the Fed's aggregate overnight repo purchases under Temporary
     # Open Market Operations) is the closest available proxy: since the SRF
     # was established in 2021, this total is effectively driven by SRF
     # take-up.
     {"id": "RPONTSYD", "name": "SRF(상시 레포) 잔액", "prefix": "$", "unit": "B"},
-    # WALCL is in millions of USD; scaled down to trillions for readability.
-    # history_count also stores ~5 years of weekly points (this series
-    # updates every Wednesday) so the dashboard can chart it over time.
-    {"id": "WALCL", "name": "Fed 대차대조표 총자산", "prefix": "$", "unit": "T", "scale": 1e-6, "history_count": 260},
+
+    # 신용 / 리스크
+    {"id": "BAMLH0A0HYM2", "name": "하이일드 스프레드", "prefix": "", "unit": "%"},
+    {"id": "BAA10Y", "name": "회사채-국채 스프레드(Baa)", "prefix": "", "unit": "%"},
+    {"id": "NFCI", "name": "시카고연은 금융여건지수", "prefix": "", "unit": ""},
+    {"id": "STLFSI4", "name": "세인트루이스연은 금융스트레스지수", "prefix": "", "unit": ""},
+
+    # 인플레이션 기대
+    {"id": "T5YIE", "name": "5년 기대인플레이션(BEI)", "prefix": "", "unit": "%"},
+    {"id": "T10YIE", "name": "10년 기대인플레이션(BEI)", "prefix": "", "unit": "%"},
+    {"id": "T5YIFR", "name": "5y5y forward 기대인플레이션", "prefix": "", "unit": "%"},
+
+    # 달러
+    {"id": "DTWEXBGS", "name": "무역가중 달러지수(Broad)", "prefix": "", "unit": ""},
+
+    # 실물경제
+    # PAYEMS is a cumulative employment level (~161,000 thousand persons),
+    # not very readable on its own -- shown as the month-over-month change
+    # (e.g. "+180K"), the usual "nonfarm payrolls" headline number.
+    {"id": "PAYEMS", "name": "비농업고용 증감(전월비)", "prefix": "", "unit": "K", "transform": "mom_diff"},
+    {"id": "UNRATE", "name": "실업률", "prefix": "", "unit": "%"},
+    # ICSA is in raw persons; scaled to thousands to match how it's usually quoted.
+    {"id": "ICSA", "name": "신규 실업수당 청구건수", "prefix": "", "unit": "K", "scale": 1e-3},
+    {"id": "INDPRO", "name": "산업생산(전년동월비)", "prefix": "", "unit": "%", "transform": "yoy"},
+    {"id": "UMCSENT", "name": "미시간대 소비자심리지수", "prefix": "", "unit": ""},
 ]
 
 
@@ -71,9 +112,16 @@ def fetch_latest_observations(series_id, api_key, count=2):
 
 
 def build_series_entry(meta, api_key):
-    """Fetch and format one series, either as a level (value + change) or,
-    for transform="yoy", as a year-over-year percent change computed from
-    12 (and 13, for the prior period's YoY) months of observations back.
+    """Fetch and format one series. Supported transforms:
+
+    - "level" (default): raw value + change vs. the previous observation.
+    - "yoy": year-over-year percent change, computed from 12 (and 13, for
+      the prior period's YoY) months of observations back. For series whose
+      raw level isn't very readable on its own (e.g. a CPI index of ~310).
+    - "mom_diff": month-over-month difference between consecutive
+      observations (e.g. nonfarm payrolls' "+180K jobs"), for series whose
+      raw level is a cumulative stock rather than a meaningful headline
+      number on its own.
     """
     base = {"name": meta["name"], "prefix": meta.get("prefix", ""), "unit": meta.get("unit", "")}
     transform = meta.get("transform", "level")
@@ -97,6 +145,34 @@ def build_series_entry(meta, api_key):
             **base,
             "date": observations[0]["date"],
             "value": round(yoy, 4),
+            "prev_value": None,
+            "change": change,
+        }
+
+    if transform == "mom_diff":
+        try:
+            observations = fetch_latest_observations(meta["id"], api_key, count=3)
+        except Exception:
+            observations = []
+
+        if len(observations) < 2:
+            return {**base, "error": "no data"}
+
+        scale = meta.get("scale", 1)
+        latest_level = float(observations[0]["value"]) * scale
+        prev_level = float(observations[1]["value"]) * scale
+        value = round(latest_level - prev_level, 4)
+
+        change = None
+        if len(observations) >= 3:
+            prev_prev_level = float(observations[2]["value"]) * scale
+            prev_diff = prev_level - prev_prev_level
+            change = round(value - prev_diff, 4)
+
+        return {
+            **base,
+            "date": observations[0]["date"],
+            "value": value,
             "prev_value": None,
             "change": change,
         }

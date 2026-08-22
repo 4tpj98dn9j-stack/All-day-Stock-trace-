@@ -27,7 +27,13 @@ pip install -r requirements.txt
   ```bash
   python daily_report.py
   ```
-- `fetch_macro_data.py` — FRED(세인트루이스 연은) API에서 거시경제 지표(10년물 국채금리, 연방기금금리, CPI 전년동월비, SRF 레포 잔액, Fed 대차대조표 총자산)를 가져와 `data/macro.json`으로 저장. 나스닥종합/VIX는 대시보드의 "나스닥 시황" 섹션이 이미 당일 Yahoo Finance 데이터로 보여주므로 여기서는 제외
+- `fetch_macro_data.py` — FRED(세인트루이스 연은) API에서 거시경제 지표를 가져와 `data/macro.json`으로 저장. 나스닥종합/VIX는 대시보드의 "나스닥 시황" 섹션이 이미 당일 Yahoo Finance 데이터로 보여주므로 여기서는 제외
+  - 금리/커브: 10년/2년/3개월물 국채금리(DGS10, DGS2, DGS3MO), 장단기 스프레드(T10Y2Y, T10Y3M), 10년 실질금리(DFII10), SOFR, 연방기금 실효금리(DFF), 연방기금금리(FEDFUNDS), CPI 전년동월비(CPIAUCSL)
+  - 유동성: Fed 대차대조표 총자산(WALCL), 역레포 잔고(RRPONTSYD), 은행 지준 잔고(WRESBAL), 통화량 M2(M2SL), SRF 레포 잔액(RPONTSYD)
+  - 신용/리스크: 하이일드 스프레드(BAMLH0A0HYM2), 회사채-국채 스프레드(BAA10Y), 시카고연은 금융여건지수(NFCI), 세인트루이스연은 금융스트레스지수(STLFSI4)
+  - 인플레이션 기대: 5년/10년 기대인플레이션(T5YIE, T10YIE), 5y5y forward(T5YIFR)
+  - 달러: 무역가중 달러지수(DTWEXBGS)
+  - 실물경제: 비농업고용 전월비(PAYEMS), 실업률(UNRATE), 신규 실업수당 청구(ICSA), 산업생산 전년동월비(INDPRO), 미시간대 소비자심리지수(UMCSENT)
   ```bash
   export FRED_API_KEY=...   # 또는 .env 파일에 FRED_API_KEY=... 저장
   python fetch_macro_data.py
