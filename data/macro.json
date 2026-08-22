@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-08-22T15:36:57Z",
+  "updated_at": "2026-08-22T15:43:56Z",
   "series": {
     "DGS10": {
       "name": "10년물 국채금리",
@@ -1156,9 +1156,9 @@
       "prefix": "$",
       "unit": "T",
       "date": "2026-08-19",
-      "value": 2935.287,
-      "prev_value": 2944.059,
-      "change": -8.772
+      "value": 2.9353,
+      "prev_value": 2.9441,
+      "change": -0.0088
     },
     "M2SL": {
       "name": "통화량(M2)",
