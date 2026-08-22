@@ -198,6 +198,9 @@ async function loadMacroData() {
           <div class="index-price">${valueText}</div>
           <div class="index-change">${changeText}</div>
         `;
+        if (series.history && series.history.length > 1) {
+          chip.addEventListener("click", () => openMacroDetail(series));
+        }
       }
 
       indicesEl.appendChild(chip);
@@ -499,6 +502,39 @@ async function openIndexDetail(symbol, name) {
   } catch (err) {
     body.innerHTML = "<p>상세 정보를 불러올 수 없습니다.</p>";
   }
+}
+
+function openMacroDetail(series) {
+  const overlay = document.getElementById("modal-overlay");
+  const title = document.getElementById("modal-title");
+  const body = document.getElementById("modal-body");
+
+  title.textContent = series.name;
+  body.innerHTML = `
+    <div class="chart-section">
+      <canvas class="detail-chart"></canvas>
+      <div class="chart-meta">
+        <span class="chart-meta-low"></span>
+        <span class="chart-meta-high"></span>
+      </div>
+    </div>
+  `;
+  overlay.classList.remove("hidden");
+
+  const canvas = body.querySelector(".detail-chart");
+  const lowEl = body.querySelector(".chart-meta-low");
+  const highEl = body.querySelector(".chart-meta-high");
+
+  const points = series.history.map((p) => ({ date: p.date, close: p.value }));
+  drawLineChart(canvas, points);
+
+  const prefix = series.prefix || "";
+  const unit = series.unit || "";
+  const closes = points.map((p) => p.close);
+  const min = Math.min(...closes);
+  const max = Math.max(...closes);
+  lowEl.textContent = `저 ${prefix}${min.toFixed(2)}${unit} (${points[0].date})`;
+  highEl.textContent = `고 ${prefix}${max.toFixed(2)}${unit} (${points[points.length - 1].date})`;
 }
 
 function closeDetail() {

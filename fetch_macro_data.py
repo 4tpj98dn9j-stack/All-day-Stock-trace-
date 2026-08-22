@@ -44,7 +44,9 @@ MACRO_SERIES = [
     # take-up.
     {"id": "RPONTSYD", "name": "SRF(상시 레포) 잔액", "prefix": "$", "unit": "B"},
     # WALCL is in millions of USD; scaled down to trillions for readability.
-    {"id": "WALCL", "name": "Fed 대차대조표 총자산", "prefix": "$", "unit": "T", "scale": 1e-6},
+    # history_count also stores ~5 years of weekly points (this series
+    # updates every Wednesday) so the dashboard can chart it over time.
+    {"id": "WALCL", "name": "Fed 대차대조표 총자산", "prefix": "$", "unit": "T", "scale": 1e-6, "history_count": 260},
 ]
 
 
@@ -99,8 +101,11 @@ def build_series_entry(meta, api_key):
             "change": change,
         }
 
+    history_count = meta.get("history_count")
+    fetch_count = max(history_count, 2) if history_count else 2
+
     try:
-        observations = fetch_latest_observations(meta["id"], api_key, count=2)
+        observations = fetch_latest_observations(meta["id"], api_key, count=fetch_count)
     except Exception:
         observations = []
 
@@ -113,7 +118,16 @@ def build_series_entry(meta, api_key):
     prev_value = round(float(observations[1]["value"]) * scale, 4) if len(observations) > 1 else None
     change = round(value - prev_value, 4) if prev_value is not None else None
 
-    return {**base, "date": latest["date"], "value": value, "prev_value": prev_value, "change": change}
+    result = {**base, "date": latest["date"], "value": value, "prev_value": prev_value, "change": change}
+
+    if history_count:
+        # observations are newest-first; store history chronologically (oldest first).
+        result["history"] = [
+            {"date": obs["date"], "value": round(float(obs["value"]) * scale, 4)}
+            for obs in reversed(observations)
+        ]
+
+    return result
 
 
 def build_macro_data(api_key):
