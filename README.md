@@ -27,7 +27,7 @@ pip install -r requirements.txt
   ```bash
   python daily_report.py
   ```
-- `fetch_macro_data.py` — FRED(세인트루이스 연은) API에서 거시경제 지표(10년물 국채금리, 나스닥종합, VIX, 연방기금금리)를 가져와 `data/macro.json`으로 저장
+- `fetch_macro_data.py` — FRED(세인트루이스 연은) API에서 거시경제 지표(10년물 국채금리, 연방기금금리, CPI 전년동월비, SRF 레포 잔액, Fed 대차대조표 총자산)를 가져와 `data/macro.json`으로 저장. 나스닥종합/VIX는 대시보드의 "나스닥 시황" 섹션이 이미 당일 Yahoo Finance 데이터로 보여주므로 여기서는 제외
   ```bash
   export FRED_API_KEY=...   # 또는 .env 파일에 FRED_API_KEY=... 저장
   python fetch_macro_data.py
@@ -53,6 +53,7 @@ pip install -r requirements.txt
 
 - 수동 실행: 저장소 **Actions** 탭 → **Macro Data** → **Run workflow** (Secret 등록 후에만 성공)
 - 시리즈 추가/변경: `fetch_macro_data.py`의 `MACRO_SERIES` 목록 수정 (FRED 시리즈 ID는 [fred.stlouisfed.org](https://fred.stlouisfed.org)에서 검색)
+- 참고: FRED에는 "SRF(상시 레포 기구)" 사용량만 따로 집계한 시리즈가 없어서, `RPONTSYD`(Fed의 오버나이트 레포 매입 총액)를 근사치로 사용합니다. 2021년 SRF 도입 이후 이 수치는 사실상 SRF 사용량과 거의 일치합니다.
 
 ## 테스트
 
