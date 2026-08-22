@@ -43,6 +43,11 @@ class DailyReportTests(unittest.TestCase):
         self.assertIn("# 2026-08-15 마감 리포트", report)
         self.assertIn("나스닥종합지수: 14,950.00 (-0.99%)", report)
         self.assertIn("나스닥 하락 마감", report)
+        self.assertIn("변동성 확대", report)
+        # VIX is intentionally omitted from the bullet list -- shown in the
+        # macro-data section instead -- but its pct change still feeds the
+        # summary sentence above (checked via "변동성 확대").
+        self.assertNotIn("VIX:", report)
         self.assertIn(
             "| QCOM | $162.68 | +$1.18 | +0.73% | $178.95 (+10%) | $300.00 (+84%) |", report,
         )

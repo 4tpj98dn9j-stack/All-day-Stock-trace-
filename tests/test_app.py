@@ -292,7 +292,11 @@ class DashboardAppTests(unittest.TestCase):
             data = response.get_json()
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(data["indices"]), 3)
+        # ^VIX is intentionally excluded from the displayed chips -- it's
+        # shown in the macro-data section instead -- but its pct change
+        # still feeds the summary sentence below.
+        self.assertEqual(len(data["indices"]), 2)
+        self.assertNotIn("^VIX", [i["symbol"] for i in data["indices"]])
         ixic = next(i for i in data["indices"] if i["symbol"] == "^IXIC")
         self.assertEqual(ixic["name"], "나스닥종합지수")
         self.assertEqual(ixic["price"], 14950.0)

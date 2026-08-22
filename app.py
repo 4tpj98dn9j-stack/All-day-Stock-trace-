@@ -24,6 +24,11 @@ INDICES = [
     {"symbol": "^VIX", "name": "VIX"},
 ]
 
+# ^VIX stays in INDICES (its pct change still feeds build_market_summary's
+# "변동성 확대/완화" phrase) but is displayed in the macro-data section
+# instead, so it's excluded here to avoid showing it twice.
+MARKET_SUMMARY_DISPLAY_SYMBOLS = {"^IXIC", "^NDX"}
+
 DAILY_REPORT_DIR = Path("daily")
 MACRO_DATA_PATH = Path("data/macro.json")
 
@@ -170,19 +175,21 @@ def market_summary():
         result = _cached_get_change(symbol)
 
         if result is None:
-            indices.append({"symbol": symbol, "name": meta["name"], "error": "no data"})
             pct_by_symbol[symbol] = None
+            if symbol in MARKET_SUMMARY_DISPLAY_SYMBOLS:
+                indices.append({"symbol": symbol, "name": meta["name"], "error": "no data"})
             continue
 
         _, _, _, _, close, prev_close, pct_change = result
-        indices.append({
-            "symbol": symbol,
-            "name": meta["name"],
-            "price": round(close, 2),
-            "change": round(close - prev_close, 2),
-            "change_pct": round(pct_change, 2),
-        })
         pct_by_symbol[symbol] = pct_change
+        if symbol in MARKET_SUMMARY_DISPLAY_SYMBOLS:
+            indices.append({
+                "symbol": symbol,
+                "name": meta["name"],
+                "price": round(close, 2),
+                "change": round(close - prev_close, 2),
+                "change_pct": round(pct_change, 2),
+            })
 
     summary = build_market_summary(
         pct_by_symbol.get("^IXIC"), pct_by_symbol.get("^NDX"), pct_by_symbol.get("^VIX"),
