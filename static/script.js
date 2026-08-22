@@ -403,21 +403,99 @@ async function loadChart(ticker, range, container) {
     const data = await res.json();
     const points = (res.ok && data.points) ? data.points : [];
 
-    drawLineChart(canvas, points);
+    drawLineChart(canvas, points, (v) => `$${v.toFixed(2)}`);
 
     if (points.length > 0) {
-      const closes = points.map((p) => p.close);
-      const min = Math.min(...closes);
-      const max = Math.max(...closes);
-      lowEl.textContent = `저 $${min.toFixed(2)} (${points[0].date})`;
-      highEl.textContent = `고 $${max.toFixed(2)} (${points[points.length - 1].date})`;
+      const { minIndex, maxIndex } = findMinMaxIndices(points);
+      lowEl.textContent = `저 $${points[minIndex].close.toFixed(2)} (${points[minIndex].date})`;
+      highEl.textContent = `고 $${points[maxIndex].close.toFixed(2)} (${points[maxIndex].date})`;
     }
   } catch (err) {
     drawLineChart(canvas, null);
   }
 }
 
-function drawLineChart(canvas, points) {
+function findMinMaxIndices(points) {
+  let minIndex = 0;
+  let maxIndex = 0;
+  points.forEach((p, i) => {
+    if (p.close < points[minIndex].close) minIndex = i;
+    if (p.close > points[maxIndex].close) maxIndex = i;
+  });
+  return { minIndex, maxIndex };
+}
+
+function parseChartDate(dateStr) {
+  // "YYYY-MM-DD" or "YYYY-MM-DD HH:MM" -- always UTC to avoid local-TZ drift.
+  const [datePart] = dateStr.split(" ");
+  const [y, m, d] = datePart.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d));
+}
+
+function nearestIndexForDate(points, targetTime) {
+  let lo = 0;
+  let hi = points.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (parseChartDate(points[mid].date).getTime() < targetTime) {
+      lo = mid + 1;
+    } else {
+      hi = mid;
+    }
+  }
+  return lo;
+}
+
+function evenlySpacedTicks(points, count, labelFn) {
+  const n = points.length;
+  const tickCount = Math.min(count, n);
+  const ticks = [];
+  for (let i = 0; i < tickCount; i++) {
+    const idx = Math.round((i * (n - 1)) / Math.max(tickCount - 1, 1));
+    ticks.push({ index: idx, label: labelFn(points[idx].date) });
+  }
+  return ticks;
+}
+
+function pickXAxisTicks(points) {
+  // Intraday points ("1d"/"1w" stock ranges) are evenly spaced by the
+  // minute, so index-based ticks read fine -- just label with the time.
+  if (points[0].date.includes(":")) {
+    return evenlySpacedTicks(points, 4, (d) => d.slice(11));
+  }
+
+  const first = parseChartDate(points[0].date);
+  const last = parseChartDate(points[points.length - 1].date);
+  const spanDays = (last - first) / 86400000;
+
+  // Too short a span for calendar month ticks to make sense -- fall back
+  // to evenly-spaced index ticks labeled "MM/DD".
+  if (spanDays <= 40) {
+    return evenlySpacedTicks(points, 5, (d) => d.slice(5).replace("-", "/"));
+  }
+
+  let stepMonths;
+  if (spanDays <= 450) stepMonths = 1;
+  else if (spanDays <= 1000) stepMonths = 3;
+  else if (spanDays <= 2200) stepMonths = 6;
+  else stepMonths = 12;
+
+  const ticks = [];
+  const cursor = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth(), 1));
+  while (cursor <= last) {
+    const idx = nearestIndexForDate(points, cursor.getTime());
+    const label = stepMonths >= 12
+      ? `${cursor.getUTCFullYear()}`
+      : `${cursor.getUTCFullYear()}.${String(cursor.getUTCMonth() + 1).padStart(2, "0")}`;
+    if (ticks.length === 0 || ticks[ticks.length - 1].index !== idx) {
+      ticks.push({ index: idx, label });
+    }
+    cursor.setUTCMonth(cursor.getUTCMonth() + stepMonths);
+  }
+  return ticks;
+}
+
+function drawLineChart(canvas, points, formatValue = (v) => v.toFixed(2)) {
   const ctx = canvas.getContext("2d");
   const dpr = window.devicePixelRatio || 1;
   const width = canvas.clientWidth || 300;
@@ -439,18 +517,50 @@ function drawLineChart(canvas, points) {
   const closes = points.map((p) => p.close);
   const min = Math.min(...closes);
   const max = Math.max(...closes);
-  const range = max - min || 1;
-  const padding = 8;
+  const valueRange = max - min || 1;
   const isUp = closes[closes.length - 1] >= closes[0];
   const lineColor = isUp ? "#e53935" : "#1e88e5";
   const fillColor = isUp ? "rgba(229, 57, 53, 0.12)" : "rgba(30, 136, 229, 0.12)";
 
-  const stepX = (width - padding * 2) / (points.length - 1);
-  const toY = (price) => height - padding - ((price - min) / range) * (height - padding * 2);
+  const padLeft = 46;
+  const padRight = 6;
+  const padTop = 8;
+  const padBottom = 16;
+  const plotWidth = Math.max(width - padLeft - padRight, 1);
+  const plotHeight = Math.max(height - padTop - padBottom, 1);
+
+  const stepX = points.length > 1 ? plotWidth / (points.length - 1) : 0;
+  const toX = (i) => padLeft + i * stepX;
+  const toY = (price) => padTop + plotHeight - ((price - min) / valueRange) * plotHeight;
+
+  // Y-axis gridlines + value labels (max / mid / min).
+  ctx.font = "10px -apple-system, sans-serif";
+  ctx.textAlign = "right";
+  ctx.textBaseline = "middle";
+  [max, (max + min) / 2, min].forEach((v) => {
+    const y = toY(v);
+    ctx.strokeStyle = "#eee";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(padLeft, y);
+    ctx.lineTo(width - padRight, y);
+    ctx.stroke();
+    ctx.fillStyle = "#999";
+    ctx.fillText(formatValue(v), padLeft - 4, y);
+  });
+
+  // X-axis date labels, spaced by calendar month/quarter/year so they
+  // can't be misread as lining up with the low/high point.
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  ctx.fillStyle = "#999";
+  pickXAxisTicks(points).forEach((tick) => {
+    ctx.fillText(tick.label, toX(tick.index), height - padBottom + 2);
+  });
 
   ctx.beginPath();
   points.forEach((p, i) => {
-    const x = padding + i * stepX;
+    const x = toX(i);
     const y = toY(p.close);
     if (i === 0) {
       ctx.moveTo(x, y);
@@ -463,8 +573,8 @@ function drawLineChart(canvas, points) {
   ctx.lineJoin = "round";
   ctx.stroke();
 
-  ctx.lineTo(padding + (points.length - 1) * stepX, height - padding);
-  ctx.lineTo(padding, height - padding);
+  ctx.lineTo(toX(points.length - 1), padTop + plotHeight);
+  ctx.lineTo(padLeft, padTop + plotHeight);
   ctx.closePath();
   ctx.fillStyle = fillColor;
   ctx.fill();
@@ -526,15 +636,13 @@ function openMacroDetail(series) {
   const highEl = body.querySelector(".chart-meta-high");
 
   const points = series.history.map((p) => ({ date: p.date, close: p.value }));
-  drawLineChart(canvas, points);
-
   const prefix = series.prefix || "";
   const unit = series.unit || "";
-  const closes = points.map((p) => p.close);
-  const min = Math.min(...closes);
-  const max = Math.max(...closes);
-  lowEl.textContent = `저 ${prefix}${min.toFixed(2)}${unit} (${points[0].date})`;
-  highEl.textContent = `고 ${prefix}${max.toFixed(2)}${unit} (${points[points.length - 1].date})`;
+  drawLineChart(canvas, points, (v) => `${prefix}${v.toFixed(2)}${unit}`);
+
+  const { minIndex, maxIndex } = findMinMaxIndices(points);
+  lowEl.textContent = `저 ${prefix}${points[minIndex].close.toFixed(2)}${unit} (${points[minIndex].date})`;
+  highEl.textContent = `고 ${prefix}${points[maxIndex].close.toFixed(2)}${unit} (${points[maxIndex].date})`;
 }
 
 function closeDetail() {
