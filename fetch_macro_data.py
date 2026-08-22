@@ -61,6 +61,9 @@ MACRO_SERIES = [
     {"id": "RRPONTSYD", "name": "역레포(ON RRP) 잔고", "prefix": "$", "unit": "B", "history_count": DAILY_HISTORY},
     # WRESBAL is in millions of USD (like WALCL); scaled to trillions for readability.
     {"id": "WRESBAL", "name": "은행 지준 잔고", "prefix": "$", "unit": "T", "scale": 1e-6, "history_count": WEEKLY_HISTORY},
+    # WTREGEN (TGA) is in millions of USD; scaled to billions -- typical
+    # balances (~$300-900B) read better as billions than as ~0.3-0.9T.
+    {"id": "WTREGEN", "name": "TGA(재무부 일반계정) 잔고", "prefix": "$", "unit": "B", "scale": 1e-3, "history_count": WEEKLY_HISTORY},
     # M2SL is in billions of USD; scaled to trillions for readability.
     {"id": "M2SL", "name": "통화량(M2)", "prefix": "$", "unit": "T", "scale": 1e-3, "history_count": MONTHLY_HISTORY},
     # FRED has no series scoped purely to "Standing Repo Facility" usage.
