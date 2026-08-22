@@ -282,8 +282,11 @@ class DashboardAppTests(unittest.TestCase):
 
     def test_market_summary_endpoint_returns_indices_and_summary(self):
         fake_results = {
+            "^GSPC": ("2026-08-05", 5500.0, 5550.0, 5450.0, 5490.0, 5550.0, -1.08),
+            "^DJI": ("2026-08-05", 40000.0, 40200.0, 39700.0, 39900.0, 40200.0, -0.75),
             "^IXIC": ("2026-08-05", 15000.0, 15100.0, 14900.0, 14950.0, 15100.0, -0.99),
             "^NDX": ("2026-08-05", 18000.0, 18100.0, 17800.0, 17850.0, 18100.0, -1.38),
+            "^RUT": ("2026-08-05", 2100.0, 2120.0, 2080.0, 2090.0, 2120.0, -1.42),
             "^VIX": ("2026-08-05", 18.0, 22.0, 17.5, 21.0, 18.0, 16.67),
         }
 
@@ -292,7 +295,7 @@ class DashboardAppTests(unittest.TestCase):
             data = response.get_json()
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(data["indices"]), 3)
+        self.assertEqual(len(data["indices"]), 6)
         ixic = next(i for i in data["indices"] if i["symbol"] == "^IXIC")
         self.assertEqual(ixic["name"], "나스닥종합지수")
         self.assertEqual(ixic["price"], 14950.0)
@@ -307,7 +310,7 @@ class DashboardAppTests(unittest.TestCase):
             data = response.get_json()
 
         self.assertTrue(all("error" in item for item in data["indices"]))
-        self.assertEqual(data["summary"], "나스닥 시황 정보를 불러올 수 없습니다.")
+        self.assertEqual(data["summary"], "미국 주식시장 시황 정보를 불러올 수 없습니다.")
 
     def test_build_market_summary_up_and_calm(self):
         summary = app.build_market_summary(ixic_pct=1.2, ndx_pct=1.5, vix_pct=-8.0)

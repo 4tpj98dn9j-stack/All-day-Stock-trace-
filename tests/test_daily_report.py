@@ -6,8 +6,11 @@ from unittest.mock import patch
 import daily_report
 
 FAKE_INDEX_RESULTS = {
+    "^GSPC": ("2026-08-15", 5500.0, 5550.0, 5450.0, 5490.0, 5550.0, -1.08),
+    "^DJI": ("2026-08-15", 40000.0, 40200.0, 39700.0, 39900.0, 40200.0, -0.75),
     "^IXIC": ("2026-08-15", 15000.0, 15100.0, 14900.0, 14950.0, 15100.0, -0.99),
     "^NDX": ("2026-08-15", 18000.0, 18100.0, 17800.0, 17850.0, 18100.0, -1.38),
+    "^RUT": ("2026-08-15", 2100.0, 2120.0, 2080.0, 2090.0, 2120.0, -1.42),
     "^VIX": ("2026-08-15", 18.0, 22.0, 17.5, 21.0, 18.0, 16.67),
 }
 FAKE_TICKER_RESULTS = {
@@ -41,7 +44,11 @@ class DailyReportTests(unittest.TestCase):
             report = daily_report.build_report("2026-08-15")
 
         self.assertIn("# 2026-08-15 마감 리포트", report)
+        self.assertIn("## 미국 주식시장 시황", report)
+        self.assertIn("S&P500: 5,490.00 (-1.08%)", report)
+        self.assertIn("다우지수: 39,900.00 (-0.75%)", report)
         self.assertIn("나스닥종합지수: 14,950.00 (-0.99%)", report)
+        self.assertIn("러셀2000: 2,090.00 (-1.42%)", report)
         self.assertIn("나스닥 하락 마감", report)
         self.assertIn("VIX: 21.00 (+16.67%)", report)
         self.assertIn(
