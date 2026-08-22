@@ -19,8 +19,11 @@ app = Flask(__name__)
 TICKERS = ["NOW", "TSLA", "SPCX", "INFQ", "PL", "QCOM"]
 
 INDICES = [
+    {"symbol": "^GSPC", "name": "S&P500"},
+    {"symbol": "^DJI", "name": "다우지수"},
     {"symbol": "^IXIC", "name": "나스닥종합지수"},
     {"symbol": "^NDX", "name": "나스닥100"},
+    {"symbol": "^RUT", "name": "러셀2000"},
     {"symbol": "^VIX", "name": "VIX"},
 ]
 
@@ -193,7 +196,7 @@ def market_summary():
 def build_market_summary(ixic_pct, ndx_pct, vix_pct):
     """Rule-based one-line market recap, e.g. '나스닥 하락 마감, 기술주 전반 약세'."""
     if ixic_pct is None:
-        return "나스닥 시황 정보를 불러올 수 없습니다."
+        return "미국 주식시장 시황 정보를 불러올 수 없습니다."
 
     if ixic_pct > 0.05:
         direction = "상승"

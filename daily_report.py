@@ -1,4 +1,4 @@
-"""Generate a dated markdown report: a NASDAQ market recap plus watchlist prices.
+"""Generate a dated markdown report: a US stock market recap plus watchlist prices.
 
 Usage:
     python daily_report.py
@@ -46,7 +46,7 @@ def format_target_price(close, stats):
 def build_report(today):
     lines = [f"# {today} 마감 리포트", ""]
 
-    lines.append("## 나스닥 시황")
+    lines.append("## 미국 주식시장 시황")
     lines.append("")
     pct_by_symbol = {}
     for meta in INDICES:

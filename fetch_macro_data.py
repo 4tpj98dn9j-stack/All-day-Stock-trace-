@@ -13,8 +13,8 @@ GitHub-hosted runners don't have that restriction).
 
 Nasdaq Composite and VIX are deliberately NOT sourced from FRED here --
 they're already shown (with same-day Yahoo Finance data) in the dashboard's
-"나스닥 시황" section, so pulling them again from FRED would just duplicate
-that with a one-day-stale number.
+"미국 주식시장 시황" section, so pulling them again from FRED would just
+duplicate that with a one-day-stale number.
 """
 
 import json
