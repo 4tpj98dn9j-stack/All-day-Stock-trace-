@@ -123,11 +123,59 @@ class FetchMacroDataTests(unittest.TestCase):
         self.assertEqual([p["date"] for p in history], ["2026-08-13", "2026-08-20"])
         self.assertAlmostEqual(history[-1]["value"], 6.6346, places=4)
 
-    def test_other_series_have_no_history(self):
+    def test_all_configured_series_get_history(self):
+        # Every MACRO_SERIES entry now sets history_count, so every
+        # successfully-fetched series should carry a non-empty "history".
         with patch("fetch_macro_data.fetch_latest_observations", side_effect=fake_fetch):
             data = fetch_macro_data.build_macro_data("fake-key")
 
-        self.assertNotIn("history", data["series"]["DGS10"])
+        for meta in fetch_macro_data.MACRO_SERIES:
+            entry = data["series"][meta["id"]]
+            self.assertNotIn("error", entry, msg=meta["id"])
+            self.assertIn("history", entry, msg=meta["id"])
+            self.assertGreater(len(entry["history"]), 0, msg=meta["id"])
+
+    def test_level_series_history_is_chronological(self):
+        with patch("fetch_macro_data.fetch_latest_observations", side_effect=fake_fetch):
+            data = fetch_macro_data.build_macro_data("fake-key")
+
+        history = data["series"]["DGS10"]["history"]
+        self.assertEqual([p["date"] for p in history], ["2026-08-20", "2026-08-21"])
+        self.assertEqual(history[-1]["value"], 4.32)
+
+    def test_yoy_series_history_is_chronological(self):
+        with patch("fetch_macro_data.fetch_latest_observations", side_effect=fake_fetch):
+            data = fetch_macro_data.build_macro_data("fake-key")
+
+        history = data["series"]["CPIAUCSL"]["history"]
+        self.assertEqual([p["date"] for p in history], ["2026-06-01", "2026-07-01"])
+        self.assertAlmostEqual(history[-1]["value"], 10.0)
+        self.assertAlmostEqual(history[0]["value"], 9.0909, places=4)
+
+    def test_mom_diff_series_history_is_chronological(self):
+        with patch("fetch_macro_data.fetch_latest_observations", side_effect=fake_fetch):
+            data = fetch_macro_data.build_macro_data("fake-key")
+
+        history = data["series"]["PAYEMS"]["history"]
+        self.assertEqual([p["date"] for p in history], ["2026-06-01", "2026-07-01"])
+        self.assertAlmostEqual(history[-1]["value"], 180.0)
+        self.assertAlmostEqual(history[0]["value"], 154.0)
+
+    def test_build_series_entry_requests_extra_history_for_yoy(self):
+        with patch("fetch_macro_data.fetch_latest_observations", side_effect=fake_fetch) as mock_fetch:
+            cpi_meta = next(m for m in fetch_macro_data.MACRO_SERIES if m["id"] == "CPIAUCSL")
+            fetch_macro_data.build_series_entry(cpi_meta, "fake-key")
+
+        # MONTHLY_HISTORY (60) + 12 months of lookback needed for each YoY point.
+        mock_fetch.assert_called_once_with("CPIAUCSL", "fake-key", count=72)
+
+    def test_build_series_entry_requests_extra_history_for_mom_diff(self):
+        with patch("fetch_macro_data.fetch_latest_observations", side_effect=fake_fetch) as mock_fetch:
+            payems_meta = next(m for m in fetch_macro_data.MACRO_SERIES if m["id"] == "PAYEMS")
+            fetch_macro_data.build_series_entry(payems_meta, "fake-key")
+
+        # MONTHLY_HISTORY (60) + 1 extra observation to diff against.
+        mock_fetch.assert_called_once_with("PAYEMS", "fake-key", count=61)
 
     def test_build_macro_data_srf_prefix_and_unit(self):
         with patch("fetch_macro_data.fetch_latest_observations", side_effect=fake_fetch):

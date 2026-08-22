@@ -30,64 +30,70 @@ load_dotenv()
 FRED_API_URL = "https://api.stlouisfed.org/fred/series/observations"
 OUTPUT_PATH = Path("data/macro.json")
 
+# Chart-history depth by observation frequency, chosen so every series'
+# click-to-chart covers roughly the same multi-year span rather than the
+# same point count (a daily series and a monthly series need very
+# different counts to each show ~5 years of history).
+DAILY_HISTORY = 500  # ~2 years of business days
+WEEKLY_HISTORY = 260  # ~5 years of weekly points
+MONTHLY_HISTORY = 60  # 5 years of monthly points
+
 MACRO_SERIES = [
     # 금리 / 커브
-    {"id": "DGS10", "name": "10년물 국채금리", "prefix": "", "unit": "%"},
-    {"id": "DGS2", "name": "2년물 국채금리", "prefix": "", "unit": "%"},
-    {"id": "DGS3MO", "name": "3개월물 국채금리", "prefix": "", "unit": "%"},
+    {"id": "DGS10", "name": "10년물 국채금리", "prefix": "", "unit": "%", "history_count": DAILY_HISTORY},
+    {"id": "DGS2", "name": "2년물 국채금리", "prefix": "", "unit": "%", "history_count": DAILY_HISTORY},
+    {"id": "DGS3MO", "name": "3개월물 국채금리", "prefix": "", "unit": "%", "history_count": DAILY_HISTORY},
     # Spreads FRED computes directly; can go negative (yield-curve inversion).
-    {"id": "T10Y2Y", "name": "장단기 스프레드(10Y-2Y)", "prefix": "", "unit": "%"},
-    {"id": "T10Y3M", "name": "장단기 스프레드(10Y-3M)", "prefix": "", "unit": "%"},
-    {"id": "DFII10", "name": "10년 실질금리(TIPS)", "prefix": "", "unit": "%"},
-    {"id": "SOFR", "name": "SOFR(익일물 담보금리)", "prefix": "", "unit": "%"},
-    {"id": "DFF", "name": "연방기금 실효금리(일별)", "prefix": "", "unit": "%"},
-    {"id": "FEDFUNDS", "name": "연방기금금리", "prefix": "", "unit": "%"},
+    {"id": "T10Y2Y", "name": "장단기 스프레드(10Y-2Y)", "prefix": "", "unit": "%", "history_count": DAILY_HISTORY},
+    {"id": "T10Y3M", "name": "장단기 스프레드(10Y-3M)", "prefix": "", "unit": "%", "history_count": DAILY_HISTORY},
+    {"id": "DFII10", "name": "10년 실질금리(TIPS)", "prefix": "", "unit": "%", "history_count": DAILY_HISTORY},
+    {"id": "SOFR", "name": "SOFR(익일물 담보금리)", "prefix": "", "unit": "%", "history_count": DAILY_HISTORY},
+    {"id": "DFF", "name": "연방기금 실효금리(일별)", "prefix": "", "unit": "%", "history_count": DAILY_HISTORY},
+    {"id": "FEDFUNDS", "name": "연방기금금리", "prefix": "", "unit": "%", "history_count": MONTHLY_HISTORY},
     # CPIAUCSL is a raw index level (~310-320), not very readable on its own,
     # so this is shown as a year-over-year % change (the usual "CPI" headline
     # number) instead of the level.
-    {"id": "CPIAUCSL", "name": "CPI(전년동월비)", "prefix": "", "unit": "%", "transform": "yoy"},
+    {"id": "CPIAUCSL", "name": "CPI(전년동월비)", "prefix": "", "unit": "%", "transform": "yoy", "history_count": MONTHLY_HISTORY},
 
     # 유동성
     # WALCL is in millions of USD; scaled down to trillions for readability.
-    # history_count also stores ~5 years of weekly points (this series
-    # updates every Wednesday) so the dashboard can chart it over time.
-    {"id": "WALCL", "name": "Fed 대차대조표 총자산", "prefix": "$", "unit": "T", "scale": 1e-6, "history_count": 260},
-    {"id": "RRPONTSYD", "name": "역레포(ON RRP) 잔고", "prefix": "$", "unit": "B"},
+    {"id": "WALCL", "name": "Fed 대차대조표 총자산", "prefix": "$", "unit": "T", "scale": 1e-6, "history_count": WEEKLY_HISTORY},
+    {"id": "RRPONTSYD", "name": "역레포(ON RRP) 잔고", "prefix": "$", "unit": "B", "history_count": DAILY_HISTORY},
     # WRESBAL is in millions of USD (like WALCL); scaled to trillions for readability.
-    {"id": "WRESBAL", "name": "은행 지준 잔고", "prefix": "$", "unit": "T", "scale": 1e-6},
+    {"id": "WRESBAL", "name": "은행 지준 잔고", "prefix": "$", "unit": "T", "scale": 1e-6, "history_count": WEEKLY_HISTORY},
     # M2SL is in billions of USD; scaled to trillions for readability.
-    {"id": "M2SL", "name": "통화량(M2)", "prefix": "$", "unit": "T", "scale": 1e-3},
+    {"id": "M2SL", "name": "통화량(M2)", "prefix": "$", "unit": "T", "scale": 1e-3, "history_count": MONTHLY_HISTORY},
     # FRED has no series scoped purely to "Standing Repo Facility" usage.
     # RPONTSYD (the Fed's aggregate overnight repo purchases under Temporary
     # Open Market Operations) is the closest available proxy: since the SRF
     # was established in 2021, this total is effectively driven by SRF
     # take-up.
-    {"id": "RPONTSYD", "name": "SRF(상시 레포) 잔액", "prefix": "$", "unit": "B"},
+    {"id": "RPONTSYD", "name": "SRF(상시 레포) 잔액", "prefix": "$", "unit": "B", "history_count": DAILY_HISTORY},
 
     # 신용 / 리스크
-    {"id": "BAMLH0A0HYM2", "name": "하이일드 스프레드", "prefix": "", "unit": "%"},
-    {"id": "BAA10Y", "name": "회사채-국채 스프레드(Baa)", "prefix": "", "unit": "%"},
-    {"id": "NFCI", "name": "시카고연은 금융여건지수", "prefix": "", "unit": ""},
-    {"id": "STLFSI4", "name": "세인트루이스연은 금융스트레스지수", "prefix": "", "unit": ""},
+    {"id": "BAMLH0A0HYM2", "name": "하이일드 스프레드", "prefix": "", "unit": "%", "history_count": DAILY_HISTORY},
+    {"id": "BAA10Y", "name": "회사채-국채 스프레드(Baa)", "prefix": "", "unit": "%", "history_count": DAILY_HISTORY},
+    {"id": "NFCI", "name": "시카고연은 금융여건지수", "prefix": "", "unit": "", "history_count": WEEKLY_HISTORY},
+    {"id": "STLFSI4", "name": "세인트루이스연은 금융스트레스지수", "prefix": "", "unit": "", "history_count": WEEKLY_HISTORY},
 
     # 인플레이션 기대
-    {"id": "T5YIE", "name": "5년 기대인플레이션(BEI)", "prefix": "", "unit": "%"},
-    {"id": "T10YIE", "name": "10년 기대인플레이션(BEI)", "prefix": "", "unit": "%"},
-    {"id": "T5YIFR", "name": "5y5y forward 기대인플레이션", "prefix": "", "unit": "%"},
+    {"id": "T5YIE", "name": "5년 기대인플레이션(BEI)", "prefix": "", "unit": "%", "history_count": DAILY_HISTORY},
+    {"id": "T10YIE", "name": "10년 기대인플레이션(BEI)", "prefix": "", "unit": "%", "history_count": DAILY_HISTORY},
+    {"id": "T5YIFR", "name": "5y5y forward 기대인플레이션", "prefix": "", "unit": "%", "history_count": DAILY_HISTORY},
 
     # 달러
-    {"id": "DTWEXBGS", "name": "무역가중 달러지수(Broad)", "prefix": "", "unit": ""},
+    {"id": "DTWEXBGS", "name": "무역가중 달러지수(Broad)", "prefix": "", "unit": "", "history_count": DAILY_HISTORY},
 
     # 실물경제
     # PAYEMS is a cumulative employment level (~161,000 thousand persons),
     # not very readable on its own -- shown as the month-over-month change
     # (e.g. "+180K"), the usual "nonfarm payrolls" headline number.
-    {"id": "PAYEMS", "name": "비농업고용 증감(전월비)", "prefix": "", "unit": "K", "transform": "mom_diff"},
-    {"id": "UNRATE", "name": "실업률", "prefix": "", "unit": "%"},
+    {"id": "PAYEMS", "name": "비농업고용 증감(전월비)", "prefix": "", "unit": "K", "transform": "mom_diff", "history_count": MONTHLY_HISTORY},
+    {"id": "UNRATE", "name": "실업률", "prefix": "", "unit": "%", "history_count": MONTHLY_HISTORY},
     # ICSA is in raw persons; scaled to thousands to match how it's usually quoted.
-    {"id": "ICSA", "name": "신규 실업수당 청구건수", "prefix": "", "unit": "K", "scale": 1e-3},
-    {"id": "INDPRO", "name": "산업생산(전년동월비)", "prefix": "", "unit": "%", "transform": "yoy"},
-    {"id": "UMCSENT", "name": "미시간대 소비자심리지수", "prefix": "", "unit": ""},
+    {"id": "ICSA", "name": "신규 실업수당 청구건수", "prefix": "", "unit": "K", "scale": 1e-3, "history_count": WEEKLY_HISTORY},
+    {"id": "INDPRO", "name": "산업생산(전년동월비)", "prefix": "", "unit": "%", "transform": "yoy", "history_count": MONTHLY_HISTORY},
+    {"id": "UMCSENT", "name": "미시간대 소비자심리지수", "prefix": "", "unit": "", "history_count": MONTHLY_HISTORY},
 ]
 
 
@@ -122,13 +128,24 @@ def build_series_entry(meta, api_key):
       observations (e.g. nonfarm payrolls' "+180K jobs"), for series whose
       raw level is a cumulative stock rather than a meaningful headline
       number on its own.
+
+    Any transform can also set "history_count" to fetch that many chart
+    points (chronologically ordered under a "history" key), reusing the
+    same raw observations already fetched for the current value -- for
+    "yoy"/"mom_diff" this means recomputing the same transform at every
+    point in the fetched window, not just the latest one.
     """
     base = {"name": meta["name"], "prefix": meta.get("prefix", ""), "unit": meta.get("unit", "")}
     transform = meta.get("transform", "level")
+    scale = meta.get("scale", 1)
+    history_count = meta.get("history_count")
 
     if transform == "yoy":
+        min_count = 14
+        fetch_count = max(min_count, history_count + 12) if history_count else min_count
+
         try:
-            observations = fetch_latest_observations(meta["id"], api_key, count=14)
+            observations = fetch_latest_observations(meta["id"], api_key, count=fetch_count)
         except Exception:
             observations = []
 
@@ -141,7 +158,7 @@ def build_series_entry(meta, api_key):
             prev_yoy = (float(observations[1]["value"]) / float(observations[13]["value"]) - 1) * 100
             change = round(yoy - prev_yoy, 4)
 
-        return {
+        result = {
             **base,
             "date": observations[0]["date"],
             "value": round(yoy, 4),
@@ -149,16 +166,30 @@ def build_series_entry(meta, api_key):
             "change": change,
         }
 
+        if history_count:
+            points = [
+                {
+                    "date": observations[i]["date"],
+                    "value": round((float(observations[i]["value"]) / float(observations[i + 12]["value"]) - 1) * 100, 4),
+                }
+                for i in range(len(observations) - 12)
+            ]
+            result["history"] = list(reversed(points[:history_count]))
+
+        return result
+
     if transform == "mom_diff":
+        min_count = 3
+        fetch_count = max(min_count, history_count + 1) if history_count else min_count
+
         try:
-            observations = fetch_latest_observations(meta["id"], api_key, count=3)
+            observations = fetch_latest_observations(meta["id"], api_key, count=fetch_count)
         except Exception:
             observations = []
 
         if len(observations) < 2:
             return {**base, "error": "no data"}
 
-        scale = meta.get("scale", 1)
         latest_level = float(observations[0]["value"]) * scale
         prev_level = float(observations[1]["value"]) * scale
         value = round(latest_level - prev_level, 4)
@@ -169,7 +200,7 @@ def build_series_entry(meta, api_key):
             prev_diff = prev_level - prev_prev_level
             change = round(value - prev_diff, 4)
 
-        return {
+        result = {
             **base,
             "date": observations[0]["date"],
             "value": value,
@@ -177,8 +208,19 @@ def build_series_entry(meta, api_key):
             "change": change,
         }
 
-    history_count = meta.get("history_count")
-    fetch_count = max(history_count, 2) if history_count else 2
+        if history_count:
+            points = [
+                {
+                    "date": observations[i]["date"],
+                    "value": round((float(observations[i]["value"]) - float(observations[i + 1]["value"])) * scale, 4),
+                }
+                for i in range(len(observations) - 1)
+            ]
+            result["history"] = list(reversed(points[:history_count]))
+
+        return result
+
+    fetch_count = max(2, history_count) if history_count else 2
 
     try:
         observations = fetch_latest_observations(meta["id"], api_key, count=fetch_count)
@@ -188,7 +230,6 @@ def build_series_entry(meta, api_key):
     if not observations:
         return {**base, "error": "no data"}
 
-    scale = meta.get("scale", 1)
     latest = observations[0]
     value = round(float(latest["value"]) * scale, 4)
     prev_value = round(float(observations[1]["value"]) * scale, 4) if len(observations) > 1 else None

@@ -60,7 +60,7 @@ pip install -r requirements.txt
 - 수동 실행: 저장소 **Actions** 탭 → **Macro Data** → **Run workflow** (Secret 등록 후에만 성공)
 - 시리즈 추가/변경: `fetch_macro_data.py`의 `MACRO_SERIES` 목록 수정 (FRED 시리즈 ID는 [fred.stlouisfed.org](https://fred.stlouisfed.org)에서 검색)
 - 참고: FRED에는 "SRF(상시 레포 기구)" 사용량만 따로 집계한 시리즈가 없어서, `RPONTSYD`(Fed의 오버나이트 레포 매입 총액)를 근사치로 사용합니다. 2021년 SRF 도입 이후 이 수치는 사실상 SRF 사용량과 거의 일치합니다.
-- Fed 대차대조표 총자산(WALCL)은 최근 5년치 주간 데이터를 함께 저장해서, 대시보드에서 해당 칩을 클릭하면 시계열 차트가 뜹니다. 다른 시리즈에도 차트를 추가하려면 `MACRO_SERIES`에 `history_count`(가져올 관측치 개수)를 지정하면 됩니다.
+- 모든 매크로 지표는 클릭하면 시계열 차트가 뜹니다 (`MACRO_SERIES`의 `history_count`로 제어) — 일간 시리즈는 최근 2년(500개), 주간 시리즈는 최근 5년(260개), 월간 시리즈는 최근 5년(60개)치를 보여줍니다. CPI/PAYEMS/INDPRO처럼 전년비·전월비로 계산되는 시리즈는 과거 구간 전체에 대해 같은 방식으로 재계산해서 차트를 만듭니다.
 
 ## 테스트
 
