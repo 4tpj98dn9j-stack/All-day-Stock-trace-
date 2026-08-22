@@ -69,6 +69,21 @@ class FetchMacroDataTests(unittest.TestCase):
         self.assertEqual(walcl["prefix"], "$")
         self.assertEqual(walcl["unit"], "T")
 
+    def test_build_macro_data_walcl_includes_chronological_history(self):
+        with patch("fetch_macro_data.fetch_latest_observations", side_effect=fake_fetch):
+            data = fetch_macro_data.build_macro_data("fake-key")
+
+        history = data["series"]["WALCL"]["history"]
+        # FAKE_OBSERVATIONS["WALCL"] is newest-first; history must be oldest-first.
+        self.assertEqual([p["date"] for p in history], ["2026-08-13", "2026-08-20"])
+        self.assertAlmostEqual(history[-1]["value"], 6.6346, places=4)
+
+    def test_other_series_have_no_history(self):
+        with patch("fetch_macro_data.fetch_latest_observations", side_effect=fake_fetch):
+            data = fetch_macro_data.build_macro_data("fake-key")
+
+        self.assertNotIn("history", data["series"]["DGS10"])
+
     def test_build_macro_data_srf_prefix_and_unit(self):
         with patch("fetch_macro_data.fetch_latest_observations", side_effect=fake_fetch):
             data = fetch_macro_data.build_macro_data("fake-key")
@@ -78,6 +93,13 @@ class FetchMacroDataTests(unittest.TestCase):
         self.assertEqual(srf["change"], 4.5)
         self.assertEqual(srf["prefix"], "$")
         self.assertEqual(srf["unit"], "B")
+
+    def test_build_series_entry_requests_history_count_for_walcl(self):
+        with patch("fetch_macro_data.fetch_latest_observations", side_effect=fake_fetch) as mock_fetch:
+            walcl_meta = next(m for m in fetch_macro_data.MACRO_SERIES if m["id"] == "WALCL")
+            fetch_macro_data.build_series_entry(walcl_meta, "fake-key")
+
+        mock_fetch.assert_called_once_with("WALCL", "fake-key", count=260)
 
     def test_build_macro_data_handles_no_data(self):
         def fetch_with_empty_fedfunds(series_id, api_key, count=2):
