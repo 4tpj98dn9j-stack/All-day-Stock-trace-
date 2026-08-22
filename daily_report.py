@@ -12,7 +12,7 @@ access to Yahoo Finance, unlike this project's other dev/CI sandboxes).
 from datetime import datetime, timezone
 from pathlib import Path
 
-from app import INDICES, TICKERS, build_market_summary, fetch_stats
+from app import INDICES, MARKET_SUMMARY_DISPLAY_SYMBOLS, TICKERS, build_market_summary, fetch_stats
 from daily_change_tracker import get_change
 
 OUTPUT_DIR = Path("daily")
@@ -50,15 +50,18 @@ def build_report(today):
     lines.append("")
     pct_by_symbol = {}
     for meta in INDICES:
-        result = get_change(meta["symbol"])
+        symbol = meta["symbol"]
+        result = get_change(symbol)
         if result is None:
-            lines.append(f"- {meta['name']}: 데이터 없음")
-            pct_by_symbol[meta["symbol"]] = None
+            pct_by_symbol[symbol] = None
+            if symbol in MARKET_SUMMARY_DISPLAY_SYMBOLS:
+                lines.append(f"- {meta['name']}: 데이터 없음")
             continue
         _, _, _, _, close, prev_close, pct_change = result
-        sign = "+" if pct_change >= 0 else ""
-        lines.append(f"- {meta['name']}: {close:,.2f} ({sign}{pct_change:.2f}%)")
-        pct_by_symbol[meta["symbol"]] = pct_change
+        pct_by_symbol[symbol] = pct_change
+        if symbol in MARKET_SUMMARY_DISPLAY_SYMBOLS:
+            sign = "+" if pct_change >= 0 else ""
+            lines.append(f"- {meta['name']}: {close:,.2f} ({sign}{pct_change:.2f}%)")
 
     summary = build_market_summary(
         pct_by_symbol.get("^IXIC"), pct_by_symbol.get("^NDX"), pct_by_symbol.get("^VIX"),
