@@ -61,7 +61,11 @@ def build_report(today):
         pct_by_symbol[meta["symbol"]] = pct_change
 
     summary = build_market_summary(
-        pct_by_symbol.get("^IXIC"), pct_by_symbol.get("^NDX"), pct_by_symbol.get("^VIX"),
+        gspc_pct=pct_by_symbol.get("^GSPC"),
+        dji_pct=pct_by_symbol.get("^DJI"),
+        ndx_pct=pct_by_symbol.get("^NDX"),
+        rut_pct=pct_by_symbol.get("^RUT"),
+        vix_pct=pct_by_symbol.get("^VIX"),
     )
     lines.append("")
     lines.append(f"> {summary}")

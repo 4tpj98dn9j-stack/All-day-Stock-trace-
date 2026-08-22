@@ -188,40 +188,56 @@ def market_summary():
         pct_by_symbol[symbol] = pct_change
 
     summary = build_market_summary(
-        pct_by_symbol.get("^IXIC"), pct_by_symbol.get("^NDX"), pct_by_symbol.get("^VIX"),
+        gspc_pct=pct_by_symbol.get("^GSPC"),
+        dji_pct=pct_by_symbol.get("^DJI"),
+        ndx_pct=pct_by_symbol.get("^NDX"),
+        rut_pct=pct_by_symbol.get("^RUT"),
+        vix_pct=pct_by_symbol.get("^VIX"),
     )
     return jsonify({"indices": indices, "summary": summary})
 
 
-def build_market_summary(ixic_pct, ndx_pct, vix_pct):
-    """Rule-based one-line market recap, e.g. '나스닥 하락 마감, 기술주 전반 약세'."""
-    if ixic_pct is None:
+def _direction_word(pct, flat_word="보합"):
+    if pct > 0.05:
+        return "상승"
+    if pct < -0.05:
+        return "하락"
+    return flat_word
+
+
+def build_market_summary(gspc_pct, dji_pct, ndx_pct, rut_pct, vix_pct):
+    """Rule-based one-line market briefing across large-cap, tech, and
+    small-cap benchmarks, e.g. '미국 증시 하락 마감, 기술주가 대형 우량주
+    대비 약세, 소형주 상대적 약세, 변동성 확대'.
+    """
+    if gspc_pct is None:
         return "미국 주식시장 시황 정보를 불러올 수 없습니다."
 
-    if ixic_pct > 0.05:
-        direction = "상승"
-    elif ixic_pct < -0.05:
-        direction = "하락"
-    else:
-        direction = "보합"
+    parts = [f"미국 증시 {_direction_word(gspc_pct)} 마감"]
 
-    if ndx_pct is None:
-        tech_word = "혼조"
-    elif ndx_pct > 0.05:
-        tech_word = "강세"
-    elif ndx_pct < -0.05:
-        tech_word = "약세"
-    else:
-        tech_word = "보합"
+    # Tech (Nasdaq 100) vs. blue-chip (Dow) divergence.
+    if ndx_pct is not None and dji_pct is not None:
+        spread = ndx_pct - dji_pct
+        if spread > 0.5:
+            parts.append("기술주가 대형 우량주 대비 강세")
+        elif spread < -0.5:
+            parts.append("기술주가 대형 우량주 대비 약세")
 
-    vix_phrase = ""
+    # Small-cap (Russell 2000) vs. broad market (S&P 500) divergence.
+    if rut_pct is not None:
+        spread = rut_pct - gspc_pct
+        if spread > 0.5:
+            parts.append("소형주 상대적 강세")
+        elif spread < -0.5:
+            parts.append("소형주 상대적 약세")
+
     if vix_pct is not None:
         if vix_pct > 5:
-            vix_phrase = ", 변동성 확대"
+            parts.append("변동성 확대")
         elif vix_pct < -5:
-            vix_phrase = ", 변동성 완화"
+            parts.append("변동성 완화")
 
-    return f"나스닥 {direction} 마감, 기술주 전반 {tech_word}{vix_phrase}"
+    return ", ".join(parts)
 
 
 @app.route("/api/index/<symbol>")

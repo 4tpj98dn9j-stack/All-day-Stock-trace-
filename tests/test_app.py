@@ -313,14 +313,23 @@ class DashboardAppTests(unittest.TestCase):
         self.assertEqual(data["summary"], "미국 주식시장 시황 정보를 불러올 수 없습니다.")
 
     def test_build_market_summary_up_and_calm(self):
-        summary = app.build_market_summary(ixic_pct=1.2, ndx_pct=1.5, vix_pct=-8.0)
+        summary = app.build_market_summary(gspc_pct=1.2, dji_pct=0.5, ndx_pct=1.5, rut_pct=1.0, vix_pct=-8.0)
         self.assertIn("상승", summary)
-        self.assertIn("강세", summary)
+        self.assertIn("기술주가 대형 우량주 대비 강세", summary)
         self.assertIn("변동성 완화", summary)
 
     def test_build_market_summary_flat(self):
-        summary = app.build_market_summary(ixic_pct=0.01, ndx_pct=0.0, vix_pct=1.0)
+        summary = app.build_market_summary(gspc_pct=0.01, dji_pct=0.0, ndx_pct=0.0, rut_pct=0.0, vix_pct=1.0)
         self.assertIn("보합", summary)
+
+    def test_build_market_summary_small_cap_divergence(self):
+        summary = app.build_market_summary(gspc_pct=0.2, dji_pct=0.2, ndx_pct=0.2, rut_pct=-1.0, vix_pct=None)
+        self.assertIn("소형주 상대적 약세", summary)
+
+    def test_build_market_summary_handles_missing_secondary_indices(self):
+        # dji/ndx/rut/vix missing shouldn't crash -- just no extra clauses.
+        summary = app.build_market_summary(gspc_pct=0.8, dji_pct=None, ndx_pct=None, rut_pct=None, vix_pct=None)
+        self.assertEqual(summary, "미국 증시 상승 마감")
 
     def test_cached_get_change_reuses_result_within_ttl(self):
         fake_result = ("2026-08-05", 100.0, 105.0, 99.0, 102.0, 100.0, 2.0)

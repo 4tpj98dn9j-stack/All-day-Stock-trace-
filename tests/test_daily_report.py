@@ -49,7 +49,8 @@ class DailyReportTests(unittest.TestCase):
         self.assertIn("다우지수: 39,900.00 (-0.75%)", report)
         self.assertIn("나스닥종합지수: 14,950.00 (-0.99%)", report)
         self.assertIn("러셀2000: 2,090.00 (-1.42%)", report)
-        self.assertIn("나스닥 하락 마감", report)
+        self.assertIn("미국 증시 하락 마감", report)
+        self.assertIn("기술주가 대형 우량주 대비 약세", report)
         self.assertIn("VIX: 21.00 (+16.67%)", report)
         self.assertIn(
             "| QCOM | $162.68 | +$1.18 | +0.73% | $178.95 (+10%) | $300.00 (+84%) |", report,
