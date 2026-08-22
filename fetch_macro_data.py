@@ -31,23 +31,38 @@ FRED_API_URL = "https://api.stlouisfed.org/fred/series/observations"
 OUTPUT_PATH = Path("data/macro.json")
 
 MACRO_SERIES = [
-    # 금리 / 유동성
+    # 금리 / 커브
     {"id": "DGS10", "name": "10년물 국채금리", "prefix": "", "unit": "%"},
+    {"id": "DGS2", "name": "2년물 국채금리", "prefix": "", "unit": "%"},
+    {"id": "DGS3MO", "name": "3개월물 국채금리", "prefix": "", "unit": "%"},
+    # Spreads FRED computes directly; can go negative (yield-curve inversion).
+    {"id": "T10Y2Y", "name": "장단기 스프레드(10Y-2Y)", "prefix": "", "unit": "%"},
+    {"id": "T10Y3M", "name": "장단기 스프레드(10Y-3M)", "prefix": "", "unit": "%"},
+    {"id": "DFII10", "name": "10년 실질금리(TIPS)", "prefix": "", "unit": "%"},
+    {"id": "SOFR", "name": "SOFR(익일물 담보금리)", "prefix": "", "unit": "%"},
+    {"id": "DFF", "name": "연방기금 실효금리(일별)", "prefix": "", "unit": "%"},
     {"id": "FEDFUNDS", "name": "연방기금금리", "prefix": "", "unit": "%"},
     # CPIAUCSL is a raw index level (~310-320), not very readable on its own,
     # so this is shown as a year-over-year % change (the usual "CPI" headline
     # number) instead of the level.
     {"id": "CPIAUCSL", "name": "CPI(전년동월비)", "prefix": "", "unit": "%", "transform": "yoy"},
+
+    # 유동성
+    # WALCL is in millions of USD; scaled down to trillions for readability.
+    # history_count also stores ~5 years of weekly points (this series
+    # updates every Wednesday) so the dashboard can chart it over time.
+    {"id": "WALCL", "name": "Fed 대차대조표 총자산", "prefix": "$", "unit": "T", "scale": 1e-6, "history_count": 260},
+    {"id": "RRPONTSYD", "name": "역레포(ON RRP) 잔고", "prefix": "$", "unit": "B"},
+    # WRESBAL is in billions of USD; scaled to trillions for readability.
+    {"id": "WRESBAL", "name": "은행 지준 잔고", "prefix": "$", "unit": "T", "scale": 1e-3},
+    # M2SL is in billions of USD; scaled to trillions for readability.
+    {"id": "M2SL", "name": "통화량(M2)", "prefix": "$", "unit": "T", "scale": 1e-3},
     # FRED has no series scoped purely to "Standing Repo Facility" usage.
     # RPONTSYD (the Fed's aggregate overnight repo purchases under Temporary
     # Open Market Operations) is the closest available proxy: since the SRF
     # was established in 2021, this total is effectively driven by SRF
     # take-up.
     {"id": "RPONTSYD", "name": "SRF(상시 레포) 잔액", "prefix": "$", "unit": "B"},
-    # WALCL is in millions of USD; scaled down to trillions for readability.
-    # history_count also stores ~5 years of weekly points (this series
-    # updates every Wednesday) so the dashboard can chart it over time.
-    {"id": "WALCL", "name": "Fed 대차대조표 총자산", "prefix": "$", "unit": "T", "scale": 1e-6, "history_count": 260},
 
     # 신용 / 리스크
     {"id": "BAMLH0A0HYM2", "name": "하이일드 스프레드", "prefix": "", "unit": "%"},

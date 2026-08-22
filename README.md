@@ -28,7 +28,8 @@ pip install -r requirements.txt
   python daily_report.py
   ```
 - `fetch_macro_data.py` — FRED(세인트루이스 연은) API에서 거시경제 지표를 가져와 `data/macro.json`으로 저장. 나스닥종합/VIX는 대시보드의 "나스닥 시황" 섹션이 이미 당일 Yahoo Finance 데이터로 보여주므로 여기서는 제외
-  - 금리/유동성: 10년물 국채금리(DGS10), 연방기금금리(FEDFUNDS), CPI 전년동월비(CPIAUCSL), SRF 레포 잔액(RPONTSYD), Fed 대차대조표 총자산(WALCL)
+  - 금리/커브: 10년/2년/3개월물 국채금리(DGS10, DGS2, DGS3MO), 장단기 스프레드(T10Y2Y, T10Y3M), 10년 실질금리(DFII10), SOFR, 연방기금 실효금리(DFF), 연방기금금리(FEDFUNDS), CPI 전년동월비(CPIAUCSL)
+  - 유동성: Fed 대차대조표 총자산(WALCL), 역레포 잔고(RRPONTSYD), 은행 지준 잔고(WRESBAL), 통화량 M2(M2SL), SRF 레포 잔액(RPONTSYD)
   - 신용/리스크: 하이일드 스프레드(BAMLH0A0HYM2), 회사채-국채 스프레드(BAA10Y), 시카고연은 금융여건지수(NFCI), 세인트루이스연은 금융스트레스지수(STLFSI4)
   - 인플레이션 기대: 5년/10년 기대인플레이션(T5YIE, T10YIE), 5y5y forward(T5YIFR)
   - 달러: 무역가중 달러지수(DTWEXBGS)

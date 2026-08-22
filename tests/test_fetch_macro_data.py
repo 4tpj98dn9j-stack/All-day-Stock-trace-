@@ -63,6 +63,17 @@ FAKE_OBSERVATIONS = {
         {"date": "2025-07-01", "value": "104.0"},
         {"date": "2025-06-01", "value": "103.0"},
     ],
+    "DGS2": [{"date": "2026-08-21", "value": "3.90"}, {"date": "2026-08-20", "value": "3.85"}],
+    "DGS3MO": [{"date": "2026-08-21", "value": "4.10"}, {"date": "2026-08-20", "value": "4.12"}],
+    "T10Y2Y": [{"date": "2026-08-21", "value": "0.42"}, {"date": "2026-08-20", "value": "0.38"}],
+    "T10Y3M": [{"date": "2026-08-21", "value": "-0.15"}, {"date": "2026-08-20", "value": "-0.20"}],
+    "DFII10": [{"date": "2026-08-21", "value": "1.95"}, {"date": "2026-08-20", "value": "1.92"}],
+    "SOFR": [{"date": "2026-08-21", "value": "4.31"}, {"date": "2026-08-20", "value": "4.30"}],
+    "DFF": [{"date": "2026-08-21", "value": "3.65"}, {"date": "2026-08-20", "value": "3.63"}],
+    "RRPONTSYD": [{"date": "2026-08-21", "value": "150.0"}, {"date": "2026-08-20", "value": "180.0"}],
+    # FRED reports WRESBAL/M2SL in billions of USD (not millions).
+    "WRESBAL": [{"date": "2026-08-20", "value": "3150"}, {"date": "2026-08-13", "value": "3120"}],
+    "M2SL": [{"date": "2026-07-01", "value": "21500"}, {"date": "2026-06-01", "value": "21400"}],
 }
 
 
@@ -152,11 +163,33 @@ class FetchMacroDataTests(unittest.TestCase):
             "DTWEXBGS": (121.50, -0.30),
             "UNRATE": (4.20, 0.10),
             "UMCSENT": (68.5, 1.5),
+            "DGS2": (3.90, 0.05),
+            "DGS3MO": (4.10, -0.02),
+            "T10Y2Y": (0.42, 0.04),
+            "T10Y3M": (-0.15, 0.05),
+            "DFII10": (1.95, 0.03),
+            "SOFR": (4.31, 0.01),
+            "DFF": (3.65, 0.02),
+            "RRPONTSYD": (150.0, -30.0),
         }
         for series_id, (expected_value, expected_change) in cases.items():
             entry = data["series"][series_id]
             self.assertAlmostEqual(entry["value"], expected_value, msg=series_id)
             self.assertAlmostEqual(entry["change"], expected_change, msg=series_id)
+
+    def test_build_macro_data_scales_wresbal_and_m2sl_to_trillions(self):
+        with patch("fetch_macro_data.fetch_latest_observations", side_effect=fake_fetch):
+            data = fetch_macro_data.build_macro_data("fake-key")
+
+        wresbal = data["series"]["WRESBAL"]
+        self.assertAlmostEqual(wresbal["value"], 3.15)
+        self.assertAlmostEqual(wresbal["change"], 0.03)
+        self.assertEqual(wresbal["prefix"], "$")
+        self.assertEqual(wresbal["unit"], "T")
+
+        m2sl = data["series"]["M2SL"]
+        self.assertAlmostEqual(m2sl["value"], 21.5)
+        self.assertAlmostEqual(m2sl["change"], 0.1)
 
     def test_build_macro_data_scales_icsa_to_thousands(self):
         with patch("fetch_macro_data.fetch_latest_observations", side_effect=fake_fetch):
