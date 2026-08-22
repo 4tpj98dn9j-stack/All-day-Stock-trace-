@@ -339,6 +339,21 @@ def fetch_stats(ticker):
     return result
 
 
+@app.route("/api/index/<symbol>/history")
+def index_history(symbol):
+    meta = next((m for m in INDICES if m["symbol"].lstrip("^").upper() == symbol.lstrip("^").upper()), None)
+    if meta is None:
+        return jsonify({"error": "unknown index"}), 404
+
+    range_param = request.args.get("range", DEFAULT_CHART_RANGE)
+    range_config = CHART_RANGES.get(range_param)
+    if range_config is None:
+        return jsonify({"error": "invalid range"}), 400
+
+    points = _cached_chart_points(meta["symbol"], range_param, range_config)
+    return jsonify({"symbol": meta["symbol"], "range": range_param, "points": points})
+
+
 @app.route("/api/quote/<ticker>/history")
 def quote_history(ticker):
     ticker = ticker.upper()

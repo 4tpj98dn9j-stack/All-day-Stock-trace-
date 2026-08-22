@@ -376,6 +376,31 @@ class DashboardAppTests(unittest.TestCase):
 
         self.assertEqual(data["error"], "no data")
 
+    def test_index_history_returns_points(self):
+        idx = pd.date_range("2026-07-01", periods=3, freq="B", tz="America/New_York")
+        fake_history = pd.DataFrame({"Close": [5480.5, 5491.25, 5479.9]}, index=idx)
+        mock_ticker = MagicMock()
+        mock_ticker.history.return_value = fake_history
+
+        with patch("app.yf.Ticker", return_value=mock_ticker):
+            response = self.client.get("/api/index/%5EGSPC/history?range=1mo")
+            data = response.get_json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(data["symbol"], "^GSPC")
+        self.assertEqual(data["range"], "1mo")
+        self.assertEqual(len(data["points"]), 3)
+        self.assertEqual(data["points"][0]["close"], 5480.5)
+        mock_ticker.history.assert_called_once_with(period="1mo", interval="1d", auto_adjust=True)
+
+    def test_index_history_unknown_symbol_returns_404(self):
+        response = self.client.get("/api/index/FAKE/history")
+        self.assertEqual(response.status_code, 404)
+
+    def test_index_history_rejects_invalid_range(self):
+        response = self.client.get("/api/index/%5EGSPC/history?range=nonsense")
+        self.assertEqual(response.status_code, 400)
+
 
 if __name__ == "__main__":
     unittest.main()
