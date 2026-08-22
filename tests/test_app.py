@@ -58,6 +58,31 @@ class DashboardAppTests(unittest.TestCase):
         finally:
             shutil.rmtree(test_dir, ignore_errors=True)
 
+    def test_macro_data_endpoint_returns_file_contents(self):
+        test_path = Path("/tmp/test_macro_data.json")
+        test_path.write_text(
+            '{"updated_at": "2026-08-22T22:00:00Z", "series": {"DGS10": {"value": 4.32}}}',
+            encoding="utf-8",
+        )
+
+        try:
+            with patch.object(app, "MACRO_DATA_PATH", test_path):
+                response = self.client.get("/api/macro-data")
+                data = response.get_json()
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(data["series"]["DGS10"]["value"], 4.32)
+        finally:
+            test_path.unlink(missing_ok=True)
+
+    def test_macro_data_endpoint_handles_missing_file(self):
+        with patch.object(app, "MACRO_DATA_PATH", Path("/tmp/does-not-exist-macro.json")):
+            response = self.client.get("/api/macro-data")
+            data = response.get_json()
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(data["error"], "no data")
+
     def test_quotes_endpoint_returns_all_tickers(self):
         fake_result = ("2026-08-05", 100.0, 105.0, 99.0, 102.0, 100.0, 2.0)
 

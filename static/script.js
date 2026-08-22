@@ -162,6 +162,50 @@ async function loadDailyReport() {
   }
 }
 
+async function loadMacroData() {
+  const indicesEl = document.getElementById("macro-indices");
+
+  try {
+    const res = await fetch("/api/macro-data");
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+    const data = await res.json();
+
+    indicesEl.innerHTML = "";
+    Object.values(data.series || {}).forEach((series) => {
+      const chip = document.createElement("div");
+      chip.className = "index-chip";
+
+      if (series.error || series.value == null) {
+        chip.innerHTML = `
+          <div class="index-name">${escapeHtml(series.name)}</div>
+          <div class="index-change">데이터 없음</div>
+        `;
+      } else {
+        const unit = series.unit || "";
+        const valueText = `${series.value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${unit}`;
+        let changeText = "";
+        if (series.change != null) {
+          const isUp = series.change >= 0;
+          chip.classList.add(isUp ? "up" : "down");
+          const sign = isUp ? "+" : "";
+          changeText = `${sign}${series.change.toFixed(2)}${unit}`;
+        }
+        chip.innerHTML = `
+          <div class="index-name">${escapeHtml(series.name)}</div>
+          <div class="index-price">${valueText}</div>
+          <div class="index-change">${changeText}</div>
+        `;
+      }
+
+      indicesEl.appendChild(chip);
+    });
+  } catch (err) {
+    indicesEl.innerHTML = `<div class="error">매크로 지표를 불러오지 못했습니다.</div>`;
+  }
+}
+
 async function loadMarketSummary() {
   const indicesEl = document.getElementById("market-indices");
   const commentEl = document.getElementById("market-comment");
@@ -254,7 +298,7 @@ async function refreshAll() {
   btn.textContent = "불러오는 중...";
 
   try {
-    await Promise.all([loadMarketSummary(), loadQuotes(), loadDailyReport()]);
+    await Promise.all([loadMarketSummary(), loadMacroData(), loadQuotes(), loadDailyReport()]);
   } finally {
     btn.disabled = false;
     btn.textContent = "새로고침";

@@ -27,6 +27,11 @@ pip install -r requirements.txt
   ```bash
   python daily_report.py
   ```
+- `fetch_macro_data.py` — FRED(세인트루이스 연은) API에서 거시경제 지표(10년물 국채금리, 나스닥종합, VIX, 연방기금금리)를 가져와 `data/macro.json`으로 저장
+  ```bash
+  export FRED_API_KEY=...   # 또는 .env 파일에 FRED_API_KEY=... 저장
+  python fetch_macro_data.py
+  ```
 
 ## 매일 마감 리포트 자동화
 
@@ -34,6 +39,20 @@ pip install -r requirements.txt
 
 - 수동 실행: 저장소 **Actions** 탭 → **Daily Report** → **Run workflow**
 - 스케줄 변경: `.github/workflows/daily-report.yml`의 `cron` 값 수정
+
+## 매크로 지표 자동화 (FRED)
+
+`.github/workflows/macro-data.yml`이 매일 22:00 UTC에 `fetch_macro_data.py`를 실행해서 `data/macro.json`을 자동으로 커밋·푸시합니다. 대시보드는 이 파일만 읽으므로, 배포된 Flask 앱 자체에는 FRED API 키가 필요 없습니다.
+
+설정 방법:
+
+1. [fred.stlouisfed.org](https://fred.stlouisfed.org)에서 무료 API 키 발급
+2. 저장소 **Settings** → **Secrets and variables** → **Actions** → **New repository secret**
+3. Name: `FRED_API_KEY`, Value: 발급받은 키 입력 후 저장
+4. (로컬 테스트용) 저장소 루트에 `.env` 파일을 만들고 `FRED_API_KEY=발급받은키`를 추가 — `.env`는 `.gitignore`에 포함되어 커밋되지 않습니다
+
+- 수동 실행: 저장소 **Actions** 탭 → **Macro Data** → **Run workflow** (Secret 등록 후에만 성공)
+- 시리즈 추가/변경: `fetch_macro_data.py`의 `MACRO_SERIES` 목록 수정 (FRED 시리즈 ID는 [fred.stlouisfed.org](https://fred.stlouisfed.org)에서 검색)
 
 ## 테스트
 

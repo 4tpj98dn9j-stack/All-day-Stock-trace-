@@ -5,6 +5,7 @@ Usage:
     (open http://localhost:5000)
 """
 
+import json
 import time
 from pathlib import Path
 
@@ -24,6 +25,7 @@ INDICES = [
 ]
 
 DAILY_REPORT_DIR = Path("daily")
+MACRO_DATA_PATH = Path("data/macro.json")
 
 NEWS_LIMIT = 5
 
@@ -121,6 +123,21 @@ def daily_report_endpoint():
         return jsonify({"error": "no report"}), 404
 
     return jsonify({"date": latest.stem, "content": content})
+
+
+@app.route("/api/macro-data")
+def macro_data_endpoint():
+    """Return the most recently committed data/macro.json (see fetch_macro_data.py)."""
+    if not MACRO_DATA_PATH.is_file():
+        return jsonify({"error": "no data"}), 404
+
+    try:
+        content = json.loads(MACRO_DATA_PATH.read_text(encoding="utf-8"))
+    except Exception as exc:
+        app.logger.warning("Failed to read macro data %s: %s", MACRO_DATA_PATH, exc)
+        return jsonify({"error": "no data"}), 404
+
+    return jsonify(content)
 
 
 @app.route("/api/quotes")
