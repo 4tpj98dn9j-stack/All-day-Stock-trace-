@@ -371,25 +371,25 @@ async function openDetail(ticker) {
       ${newsHtml}
     `;
 
-    setupChart(ticker, body);
+    setupChart((range) => `/api/quote/${encodeURIComponent(ticker)}/history?range=${encodeURIComponent(range)}`, body);
   } catch (err) {
     body.innerHTML = "<p>상세 정보를 불러올 수 없습니다.</p>";
   }
 }
 
-function setupChart(ticker, container) {
+function setupChart(historyUrlFor, container, formatValue = (v) => `$${v.toFixed(2)}`) {
   const buttons = container.querySelectorAll(".range-btn");
   buttons.forEach((btn) => {
     btn.addEventListener("click", () => {
       buttons.forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
-      loadChart(ticker, btn.dataset.range, container);
+      loadChart(historyUrlFor, btn.dataset.range, container, formatValue);
     });
   });
-  loadChart(ticker, DEFAULT_CHART_RANGE, container);
+  loadChart(historyUrlFor, DEFAULT_CHART_RANGE, container, formatValue);
 }
 
-async function loadChart(ticker, range, container) {
+async function loadChart(historyUrlFor, range, container, formatValue = (v) => `$${v.toFixed(2)}`) {
   const canvas = container.querySelector(".detail-chart");
   const lowEl = container.querySelector(".chart-meta-low");
   const highEl = container.querySelector(".chart-meta-high");
@@ -399,16 +399,16 @@ async function loadChart(ticker, range, container) {
   drawLineChart(canvas, null);
 
   try {
-    const res = await fetch(`/api/quote/${encodeURIComponent(ticker)}/history?range=${encodeURIComponent(range)}`);
+    const res = await fetch(historyUrlFor(range));
     const data = await res.json();
     const points = (res.ok && data.points) ? data.points : [];
 
-    drawLineChart(canvas, points, (v) => `$${v.toFixed(2)}`);
+    drawLineChart(canvas, points, formatValue);
 
     if (points.length > 0) {
       const { minIndex, maxIndex } = findMinMaxIndices(points);
-      lowEl.textContent = `저 $${points[minIndex].close.toFixed(2)} (${points[minIndex].date})`;
-      highEl.textContent = `고 $${points[maxIndex].close.toFixed(2)} (${points[maxIndex].date})`;
+      lowEl.textContent = `저 ${formatValue(points[minIndex].close)} (${points[minIndex].date})`;
+      highEl.textContent = `고 ${formatValue(points[maxIndex].close)} (${points[maxIndex].date})`;
     }
   } catch (err) {
     drawLineChart(canvas, null);
@@ -602,6 +602,18 @@ async function openIndexDetail(symbol, name) {
     const fmt = (n) => n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
     body.innerHTML = `
+      <div class="chart-section">
+        <div class="chart-range-buttons">
+          ${CHART_RANGES.map((r) => `
+            <button type="button" class="range-btn${r.value === DEFAULT_CHART_RANGE ? " active" : ""}" data-range="${r.value}">${r.label}</button>
+          `).join("")}
+        </div>
+        <canvas class="detail-chart"></canvas>
+        <div class="chart-meta">
+          <span class="chart-meta-low"></span>
+          <span class="chart-meta-high"></span>
+        </div>
+      </div>
       <div class="detail-grid">
         <div><div class="label">현재가</div><div class="value">${fmt(data.close)}</div></div>
         <div><div class="label">전일 종가</div><div class="value">${fmt(data.prev_close)}</div></div>
@@ -610,6 +622,8 @@ async function openIndexDetail(symbol, name) {
         <div><div class="label">저가</div><div class="value">${fmt(data.low)}</div></div>
       </div>
     `;
+
+    setupChart((range) => `/api/index/${encodeURIComponent(symbol)}/history?range=${encodeURIComponent(range)}`, body, fmt);
   } catch (err) {
     body.innerHTML = "<p>상세 정보를 불러올 수 없습니다.</p>";
   }
