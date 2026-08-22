@@ -1,37 +1,50 @@
 {
-  "updated_at": "2026-08-22T10:54:35Z",
+  "updated_at": "2026-08-22T11:16:16Z",
   "series": {
     "DGS10": {
       "name": "10년물 국채금리",
+      "prefix": "",
       "unit": "%",
       "date": "2026-08-20",
       "value": 4.69,
       "prev_value": 4.65,
       "change": 0.04
     },
-    "NASDAQCOM": {
-      "name": "나스닥종합지수(FRED)",
-      "unit": "",
-      "date": "2026-08-21",
-      "value": 26180.45,
-      "prev_value": 26067.17,
-      "change": 113.28
-    },
-    "VIXCLS": {
-      "name": "VIX 종가",
-      "unit": "",
-      "date": "2026-08-20",
-      "value": 16.01,
-      "prev_value": 14.89,
-      "change": 1.12
-    },
     "FEDFUNDS": {
       "name": "연방기금금리",
+      "prefix": "",
       "unit": "%",
       "date": "2026-07-01",
       "value": 3.63,
       "prev_value": 3.63,
       "change": 0.0
+    },
+    "CPIAUCSL": {
+      "name": "CPI(전년동월비)",
+      "prefix": "",
+      "unit": "%",
+      "date": "2026-07-01",
+      "value": 3.5398,
+      "prev_value": null,
+      "change": -0.1868
+    },
+    "RPONTSYD": {
+      "name": "SRF(상시 레포) 잔액",
+      "prefix": "$",
+      "unit": "B",
+      "date": "2026-08-21",
+      "value": 0.0,
+      "prev_value": 0.0,
+      "change": 0.0
+    },
+    "WALCL": {
+      "name": "Fed 대차대조표 총자산",
+      "prefix": "$",
+      "unit": "T",
+      "date": "2026-08-19",
+      "value": 6.7457,
+      "prev_value": 6.76,
+      "change": -0.0143
     }
   }
 }
