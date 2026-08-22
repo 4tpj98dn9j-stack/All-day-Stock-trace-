@@ -53,8 +53,8 @@ MACRO_SERIES = [
     # updates every Wednesday) so the dashboard can chart it over time.
     {"id": "WALCL", "name": "Fed 대차대조표 총자산", "prefix": "$", "unit": "T", "scale": 1e-6, "history_count": 260},
     {"id": "RRPONTSYD", "name": "역레포(ON RRP) 잔고", "prefix": "$", "unit": "B"},
-    # WRESBAL is in billions of USD; scaled to trillions for readability.
-    {"id": "WRESBAL", "name": "은행 지준 잔고", "prefix": "$", "unit": "T", "scale": 1e-3},
+    # WRESBAL is in millions of USD (like WALCL); scaled to trillions for readability.
+    {"id": "WRESBAL", "name": "은행 지준 잔고", "prefix": "$", "unit": "T", "scale": 1e-6},
     # M2SL is in billions of USD; scaled to trillions for readability.
     {"id": "M2SL", "name": "통화량(M2)", "prefix": "$", "unit": "T", "scale": 1e-3},
     # FRED has no series scoped purely to "Standing Repo Facility" usage.

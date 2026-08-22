@@ -71,8 +71,8 @@ FAKE_OBSERVATIONS = {
     "SOFR": [{"date": "2026-08-21", "value": "4.31"}, {"date": "2026-08-20", "value": "4.30"}],
     "DFF": [{"date": "2026-08-21", "value": "3.65"}, {"date": "2026-08-20", "value": "3.63"}],
     "RRPONTSYD": [{"date": "2026-08-21", "value": "150.0"}, {"date": "2026-08-20", "value": "180.0"}],
-    # FRED reports WRESBAL/M2SL in billions of USD (not millions).
-    "WRESBAL": [{"date": "2026-08-20", "value": "3150"}, {"date": "2026-08-13", "value": "3120"}],
+    # FRED reports WRESBAL in millions of USD (like WALCL); M2SL in billions.
+    "WRESBAL": [{"date": "2026-08-20", "value": "3150000"}, {"date": "2026-08-13", "value": "3120000"}],
     "M2SL": [{"date": "2026-07-01", "value": "21500"}, {"date": "2026-06-01", "value": "21400"}],
 }
 
