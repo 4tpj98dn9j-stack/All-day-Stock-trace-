@@ -183,14 +183,15 @@ async function loadMacroData() {
           <div class="index-change">데이터 없음</div>
         `;
       } else {
+        const prefix = series.prefix || "";
         const unit = series.unit || "";
-        const valueText = `${series.value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${unit}`;
+        const valueText = `${prefix}${series.value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${unit}`;
         let changeText = "";
         if (series.change != null) {
           const isUp = series.change >= 0;
           chip.classList.add(isUp ? "up" : "down");
-          const sign = isUp ? "+" : "";
-          changeText = `${sign}${series.change.toFixed(2)}${unit}`;
+          const sign = isUp ? "+" : "-";
+          changeText = `${sign}${prefix}${Math.abs(series.change).toFixed(2)}${unit}`;
         }
         chip.innerHTML = `
           <div class="index-name">${escapeHtml(series.name)}</div>
