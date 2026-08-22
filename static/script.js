@@ -484,9 +484,10 @@ function pickXAxisTicks(points) {
   const cursor = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth(), 1));
   while (cursor <= last) {
     const idx = nearestIndexForDate(points, cursor.getTime());
+    const shortYear = String(cursor.getUTCFullYear()).slice(-2);
     const label = stepMonths >= 12
-      ? `${cursor.getUTCFullYear()}`
-      : `${cursor.getUTCFullYear()}.${String(cursor.getUTCMonth() + 1).padStart(2, "0")}`;
+      ? `${shortYear}`
+      : `${shortYear}.${String(cursor.getUTCMonth() + 1).padStart(2, "0")}`;
     if (ticks.length === 0 || ticks[ticks.length - 1].index !== idx) {
       ticks.push({ index: idx, label });
     }
