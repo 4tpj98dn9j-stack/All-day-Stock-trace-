@@ -73,6 +73,8 @@ FAKE_OBSERVATIONS = {
     "RRPONTSYD": [{"date": "2026-08-21", "value": "150.0"}, {"date": "2026-08-20", "value": "180.0"}],
     # FRED reports WRESBAL in millions of USD (like WALCL); M2SL in billions.
     "WRESBAL": [{"date": "2026-08-20", "value": "3150000"}, {"date": "2026-08-13", "value": "3120000"}],
+    # FRED reports WTREGEN in millions of USD too.
+    "WTREGEN": [{"date": "2026-08-20", "value": "650000"}, {"date": "2026-08-13", "value": "700000"}],
     "M2SL": [{"date": "2026-07-01", "value": "21500"}, {"date": "2026-06-01", "value": "21400"}],
 }
 
@@ -238,6 +240,16 @@ class FetchMacroDataTests(unittest.TestCase):
         m2sl = data["series"]["M2SL"]
         self.assertAlmostEqual(m2sl["value"], 21.5)
         self.assertAlmostEqual(m2sl["change"], 0.1)
+
+    def test_build_macro_data_scales_wtregen_to_billions(self):
+        with patch("fetch_macro_data.fetch_latest_observations", side_effect=fake_fetch):
+            data = fetch_macro_data.build_macro_data("fake-key")
+
+        tga = data["series"]["WTREGEN"]
+        self.assertAlmostEqual(tga["value"], 650.0)
+        self.assertAlmostEqual(tga["change"], -50.0)
+        self.assertEqual(tga["prefix"], "$")
+        self.assertEqual(tga["unit"], "B")
 
     def test_build_macro_data_scales_icsa_to_thousands(self):
         with patch("fetch_macro_data.fetch_latest_observations", side_effect=fake_fetch):
