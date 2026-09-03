@@ -572,18 +572,32 @@ function drawLineChart(canvas, points, formatValue = (v) => v.toFixed(2)) {
     const x = toX(index);
     const y = toY(value);
 
+    // White halo behind the dot so it stays visible where the line/fill
+    // pass right through it.
+    ctx.beginPath();
+    ctx.arc(x, y, 4.5, 0, Math.PI * 2);
+    ctx.fillStyle = "#fff";
+    ctx.fill();
     ctx.beginPath();
     ctx.arc(x, y, 3, 0, Math.PI * 2);
     ctx.fillStyle = lineColor;
     ctx.fill();
 
     ctx.font = "bold 11px -apple-system, sans-serif";
-    ctx.fillStyle = lineColor;
     ctx.textBaseline = labelAbove ? "bottom" : "top";
     const nearLeftEdge = x < padLeft + plotWidth * 0.15;
     const nearRightEdge = x > padLeft + plotWidth * 0.85;
     ctx.textAlign = nearLeftEdge ? "left" : nearRightEdge ? "right" : "center";
-    ctx.fillText(formatValue(value), x, labelAbove ? y - 6 : y + 6);
+    const labelY = labelAbove ? y - 6 : y + 6;
+    const label = formatValue(value);
+    // Same white-halo trick for the label text -- a thick white stroke
+    // behind the colored fill keeps it legible over the line/fill/gridlines.
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = "#fff";
+    ctx.lineJoin = "round";
+    ctx.strokeText(label, x, labelY);
+    ctx.fillStyle = lineColor;
+    ctx.fillText(label, x, labelY);
   };
   // Both labels sit above their point -- the low point is always at the
   // very bottom of the plot area, so "below" would collide with the
