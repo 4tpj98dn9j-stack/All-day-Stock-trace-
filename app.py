@@ -33,11 +33,13 @@ MACRO_DATA_PATH = Path("data/macro.json")
 
 NEWS_LIMIT = 5
 
-# Yahoo Finance (via yfinance) rate-limits aggressively. Every route below is
-# cached in-process for a short TTL so repeated clicks/refreshes reuse the
-# same data instead of hammering Yahoo on every request.
+# Yahoo Finance (via yfinance) rate-limits aggressively -- and on Render's
+# free tier, the outbound IP is shared with other tenants' apps, so this
+# app can get rate-limited even without much traffic of its own. Every
+# route below is cached in-process for a TTL so repeated clicks/refreshes
+# reuse the same data instead of hammering Yahoo on every request.
 _CACHE = {}
-QUOTE_CACHE_TTL = 30
+QUOTE_CACHE_TTL = 90
 DETAIL_CACHE_TTL = 300
 HISTORY_CACHE_TTL = 60
 
