@@ -23,6 +23,7 @@ INDICES = [
     {"symbol": "^DJI", "name": "다우지수"},
     {"symbol": "^IXIC", "name": "나스닥종합지수"},
     {"symbol": "^NDX", "name": "나스닥100"},
+    {"symbol": "NQ=F", "name": "나스닥100 선물"},
     {"symbol": "^RUT", "name": "러셀2000"},
     {"symbol": "^VIX", "name": "VIX"},
 ]
