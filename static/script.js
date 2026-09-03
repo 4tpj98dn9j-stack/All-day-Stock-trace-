@@ -523,9 +523,9 @@ function drawLineChart(canvas, points, formatValue = (v) => v.toFixed(2)) {
   const lineColor = isUp ? "#e53935" : "#1e88e5";
   const fillColor = isUp ? "rgba(229, 57, 53, 0.12)" : "rgba(30, 136, 229, 0.12)";
 
-  const padLeft = 46;
-  const padRight = 6;
-  const padTop = 8;
+  const padLeft = 8;
+  const padRight = 8;
+  const padTop = 20;
   const padBottom = 16;
   const plotWidth = Math.max(width - padLeft - padRight, 1);
   const plotHeight = Math.max(height - padTop - padBottom, 1);
@@ -533,22 +533,6 @@ function drawLineChart(canvas, points, formatValue = (v) => v.toFixed(2)) {
   const stepX = points.length > 1 ? plotWidth / (points.length - 1) : 0;
   const toX = (i) => padLeft + i * stepX;
   const toY = (price) => padTop + plotHeight - ((price - min) / valueRange) * plotHeight;
-
-  // Y-axis gridlines + value labels (max / mid / min).
-  ctx.font = "10px -apple-system, sans-serif";
-  ctx.textAlign = "right";
-  ctx.textBaseline = "middle";
-  [max, (max + min) / 2, min].forEach((v) => {
-    const y = toY(v);
-    ctx.strokeStyle = "#eee";
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(padLeft, y);
-    ctx.lineTo(width - padRight, y);
-    ctx.stroke();
-    ctx.fillStyle = "#999";
-    ctx.fillText(formatValue(v), padLeft - 4, y);
-  });
 
   // X-axis date labels, spaced by calendar month/quarter/year so they
   // can't be misread as lining up with the low/high point.
@@ -579,6 +563,35 @@ function drawLineChart(canvas, points, formatValue = (v) => v.toFixed(2)) {
   ctx.closePath();
   ctx.fillStyle = fillColor;
   ctx.fill();
+
+  // Mark the actual high/low points directly on the line (instead of a
+  // separate Y-axis) so the value can't be misread as belonging to a
+  // different point in time.
+  const { minIndex, maxIndex } = findMinMaxIndices(points);
+  const markPoint = (index, value, labelAbove) => {
+    const x = toX(index);
+    const y = toY(value);
+
+    ctx.beginPath();
+    ctx.arc(x, y, 3, 0, Math.PI * 2);
+    ctx.fillStyle = lineColor;
+    ctx.fill();
+
+    ctx.font = "bold 11px -apple-system, sans-serif";
+    ctx.fillStyle = lineColor;
+    ctx.textBaseline = labelAbove ? "bottom" : "top";
+    const nearLeftEdge = x < padLeft + plotWidth * 0.15;
+    const nearRightEdge = x > padLeft + plotWidth * 0.85;
+    ctx.textAlign = nearLeftEdge ? "left" : nearRightEdge ? "right" : "center";
+    ctx.fillText(formatValue(value), x, labelAbove ? y - 6 : y + 6);
+  };
+  // Both labels sit above their point -- the low point is always at the
+  // very bottom of the plot area, so "below" would collide with the
+  // X-axis date labels underneath it.
+  markPoint(maxIndex, max, true);
+  if (minIndex !== maxIndex) {
+    markPoint(minIndex, min, true);
+  }
 }
 
 async function openIndexDetail(symbol, name) {
