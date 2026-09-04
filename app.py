@@ -309,7 +309,7 @@ def quote_detail(ticker):
 
 def fetch_stats(ticker):
     """Return supplementary fundamentals: market cap, PE, 52-week range, beta, EPS,
-    avg volume, and analyst consensus target price.
+    avg volume, analyst consensus target price, and pre/post-market quote.
 
     Backed by yfinance's Ticker.info, which is a broad, occasionally-missing-keys
     dict scraped from Yahoo's quote page -- any field can legitimately be absent
@@ -337,6 +337,11 @@ def fetch_stats(ticker):
         "avg_volume": info.get("averageVolume"),
         "target_mean_price": info.get("targetMeanPrice"),
         "analyst_count": info.get("numberOfAnalystOpinions"),
+        "market_state": info.get("marketState"),
+        "post_market_price": info.get("postMarketPrice"),
+        "post_market_change_pct": info.get("postMarketChangePercent"),
+        "pre_market_price": info.get("preMarketPrice"),
+        "pre_market_change_pct": info.get("preMarketChangePercent"),
     }
     _cache_set(key, result, DETAIL_CACHE_TTL)
     return result

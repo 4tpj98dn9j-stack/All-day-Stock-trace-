@@ -299,6 +299,21 @@ h1 {
   font-size: 1.2rem;
 }
 
+.after-hours-price {
+  margin: -4px 0 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #666;
+}
+
+.after-hours-price.up {
+  color: #e53935;
+}
+
+.after-hours-price.down {
+  color: #1e88e5;
+}
+
 .chart-section {
   margin-bottom: 16px;
 }

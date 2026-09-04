@@ -26,6 +26,26 @@ function formatStat(n, decimals = 2) {
   return n == null ? "-" : n.toFixed(decimals);
 }
 
+function renderAfterHoursPrice(stats) {
+  if (!stats) return "";
+
+  const render = (price, pct, label) => {
+    const isUp = pct != null && pct >= 0;
+    const sign = isUp ? "+" : "";
+    const pctText = pct != null ? ` (${sign}${pct.toFixed(2)}%)` : "";
+    const cls = pct != null ? (isUp ? "up" : "down") : "";
+    return `<p class="after-hours-price ${cls}">${label}: $${price.toFixed(2)}${pctText}</p>`;
+  };
+
+  if (stats.post_market_price != null) {
+    return render(stats.post_market_price, stats.post_market_change_pct, "시간외");
+  }
+  if (stats.pre_market_price != null) {
+    return render(stats.pre_market_price, stats.pre_market_change_pct, "프리마켓");
+  }
+  return "";
+}
+
 function renderStatsGrid(stats) {
   if (!stats) {
     return "";
@@ -347,6 +367,7 @@ async function openDetail(ticker) {
       : `<div class="news-list"><h3>최근 뉴스</h3><p>표시할 뉴스가 없습니다.</p></div>`;
 
     body.innerHTML = `
+      ${renderAfterHoursPrice(data.stats)}
       <div class="chart-section">
         <div class="chart-range-buttons">
           ${CHART_RANGES.map((r) => `
