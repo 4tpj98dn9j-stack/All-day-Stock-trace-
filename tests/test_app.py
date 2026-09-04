@@ -236,6 +236,11 @@ class DashboardAppTests(unittest.TestCase):
             "averageVolume": 12_000_000,
             "targetMeanPrice": 210.5,
             "numberOfAnalystOpinions": 24,
+            "marketState": "POST",
+            "postMarketPrice": 215.3,
+            "postMarketChangePercent": 1.25,
+            "preMarketPrice": None,
+            "preMarketChangePercent": None,
             "someOtherField": "ignored",
         }
 
@@ -252,6 +257,11 @@ class DashboardAppTests(unittest.TestCase):
             "avg_volume": 12_000_000,
             "target_mean_price": 210.5,
             "analyst_count": 24,
+            "market_state": "POST",
+            "post_market_price": 215.3,
+            "post_market_change_pct": 1.25,
+            "pre_market_price": None,
+            "pre_market_change_pct": None,
         })
 
     def test_fetch_stats_defaults_missing_fields_to_none(self):
