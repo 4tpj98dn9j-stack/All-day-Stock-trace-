@@ -30,7 +30,8 @@ pip install -r requirements.txt
 - `fetch_macro_data.py` — FRED(세인트루이스 연은) API에서 거시경제 지표를 가져와 `data/macro.json`으로 저장. 나스닥종합/VIX는 대시보드의 "미국 주식시장 시황" 섹션이 이미 당일 Yahoo Finance 데이터로 보여주므로 여기서는 제외
   - 금리/커브: 10년/2년/3개월물 국채금리(DGS10, DGS2, DGS3MO), 장단기 스프레드(T10Y2Y, T10Y3M), 10년 실질금리(DFII10), SOFR, 연방기금 실효금리(DFF), 연방기금금리(FEDFUNDS), CPI 전년동월비(CPIAUCSL)
   - 유동성: Fed 대차대조표 총자산(WALCL), 역레포 잔고(RRPONTSYD), 은행 지준 잔고(WRESBAL), TGA 잔고(WTREGEN), 통화량 M2(M2SL), SRF 레포 잔액(RPONTSYD)
-  - 신용/리스크: 하이일드 스프레드(BAMLH0A0HYM2), 회사채-국채 스프레드(BAA10Y), 시카고연은 금융여건지수(NFCI), 세인트루이스연은 금융스트레스지수(STLFSI4)
+  - 신용/리스크: 하이일드 스프레드(BAMLH0A0HYM2), 회사채-국채 스프레드(BAA10Y), 시카고연은 금융여건지수(NFCI), 세인트루이스연은 금융스트레스지수(STLFSI4), 등급 격차(CCC−BB: BAMLH0A3HYC − BAMLH0A1HYBB), MOVE 지수(채권 변동성, Yahoo `^MOVE`)
+  - 주식-신용 괴리: S&P500 52주 고점 대비(SP500), HY 스프레드 20일 변화(BAMLH0A0HYM2)
   - 인플레이션 기대: 5년/10년 기대인플레이션(T5YIE, T10YIE), 5y5y forward(T5YIFR)
   - 달러: 무역가중 달러지수(DTWEXBGS)
   - 실물경제: 비농업고용 전월비(PAYEMS), 실업률(UNRATE), 신규 실업수당 청구(ICSA), 산업생산 전년동월비(INDPRO), 미시간대 소비자심리지수(UMCSENT)
@@ -60,6 +61,8 @@ pip install -r requirements.txt
 - 수동 실행: 저장소 **Actions** 탭 → **Macro Data** → **Run workflow** (Secret 등록 후에만 성공)
 - 시리즈 추가/변경: `fetch_macro_data.py`의 `MACRO_SERIES` 목록 수정 (FRED 시리즈 ID는 [fred.stlouisfed.org](https://fred.stlouisfed.org)에서 검색)
 - 참고: FRED에는 "SRF(상시 레포 기구)" 사용량만 따로 집계한 시리즈가 없어서, `RPONTSYD`(Fed의 오버나이트 레포 매입 총액)를 근사치로 사용합니다. 2021년 SRF 도입 이후 이 수치는 사실상 SRF 사용량과 거의 일치합니다.
+- 일부 지표는 FRED 원본 시리즈가 아니라 계산해서 만듭니다: `spread`(두 시리즈의 차이 — 등급 격차), `drawdown`(직전 N개 관측치 중 고점 대비 %  — S&P500 52주 고점 대비), `change_over`(N기간 전 대비 변화 — HY 스프레드 20일 변화). 과거 구간 전체에 대해 같은 계산을 반복해서 차트도 함께 만듭니다.
+- 참고: "에너지 제외 하이일드 스프레드(ex-energy HY OAS)"는 넣지 못했습니다. FRED는 하이일드를 **신용등급별**(BB/B/CCC)로만 쪼개서 제공하고 **섹터별** 시리즈는 없어서, 직접 계산하려면 지수 편입 채권별 섹터 분류와 시가총액 가중치가 필요한데 무료 소스로는 구할 수 없습니다.
 - 모든 매크로 지표는 클릭하면 시계열 차트가 뜹니다 (`MACRO_SERIES`의 `history_count`로 제어) — 일간 시리즈는 최근 2년(500개), 주간 시리즈는 최근 5년(260개), 월간 시리즈는 최근 5년(60개)치를 보여줍니다. CPI/PAYEMS/INDPRO처럼 전년비·전월비로 계산되는 시리즈는 과거 구간 전체에 대해 같은 방식으로 재계산해서 차트를 만듭니다.
 
 ## 테스트

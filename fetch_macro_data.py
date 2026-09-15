@@ -15,6 +15,11 @@ Nasdaq Composite and VIX are deliberately NOT sourced from FRED here --
 they're already shown (with same-day Yahoo Finance data) in the dashboard's
 "미국 주식시장 시황" section, so pulling them again from FRED would just
 duplicate that with a one-day-stale number.
+
+Most series come from FRED; a few (marked source="yahoo") come from Yahoo
+Finance instead, for indices FRED doesn't carry at all. Those still run
+here rather than in the Flask app so they're fetched once a day on a
+GitHub runner and committed, rather than live from Render.
 """
 
 import json
@@ -23,6 +28,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import requests
+import yfinance as yf
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -78,6 +84,39 @@ MACRO_SERIES = [
     {"id": "BAA10Y", "name": "회사채-국채 스프레드(Baa)", "prefix": "", "unit": "%", "history_count": DAILY_HISTORY},
     {"id": "NFCI", "name": "시카고연은 금융여건지수", "prefix": "", "unit": "", "history_count": WEEKLY_HISTORY},
     {"id": "STLFSI4", "name": "세인트루이스연은 금융스트레스지수", "prefix": "", "unit": "", "history_count": WEEKLY_HISTORY},
+    # Quality dispersion inside high yield: CCC spreads minus BB spreads.
+    # FRED has no ready-made series for the gap, so it's computed from the
+    # two rating buckets. Narrowing = reaching for yield down the quality
+    # curve; widening = the market discriminating against weak credits.
+    {
+        "key": "HY_CCC_BB_GAP", "id": "BAMLH0A3HYC", "minus_id": "BAMLH0A1HYBB",
+        "name": "등급 격차(CCC−BB)", "prefix": "", "unit": "%p",
+        "transform": "spread", "history_count": DAILY_HISTORY,
+    },
+    # MOVE (Treasury option-implied vol, "the VIX for bonds") isn't on FRED
+    # at all -- ICE licenses it elsewhere -- so this one comes from Yahoo.
+    {
+        "id": "^MOVE", "source": "yahoo", "period": "2y",
+        "name": "MOVE 지수(채권 변동성)", "prefix": "", "unit": "",
+        "history_count": DAILY_HISTORY,
+    },
+
+    # 주식-신용 괴리
+    # Equities near their highs while credit spreads widen is a classic
+    # early-warning divergence. Rather than collapsing that into one
+    # threshold-based verdict, both halves are shown as plain numbers:
+    # how far the S&P 500 sits below its 52-week high, and how much the
+    # high-yield spread has moved over the last 20 trading days.
+    {
+        "key": "SP500_DRAWDOWN", "id": "SP500", "transform": "drawdown", "window": 252,
+        "name": "S&P500 52주 고점 대비", "prefix": "", "unit": "%",
+        "history_count": DAILY_HISTORY,
+    },
+    {
+        "key": "HY_OAS_20D", "id": "BAMLH0A0HYM2", "transform": "change_over", "lookback": 20,
+        "name": "HY 스프레드 20일 변화", "prefix": "", "unit": "bp",
+        "scale": 100, "history_count": DAILY_HISTORY,
+    },
 
     # 인플레이션 기대
     {"id": "T5YIE", "name": "5년 기대인플레이션(BEI)", "prefix": "", "unit": "%", "history_count": DAILY_HISTORY},
@@ -100,6 +139,13 @@ MACRO_SERIES = [
 ]
 
 
+def series_key(meta):
+    """JSON key for a series -- its FRED/Yahoo id, unless it's a derived
+    series (a spread, a drawdown) where the raw id would be misleading.
+    """
+    return meta.get("key", meta["id"])
+
+
 def fetch_latest_observations(series_id, api_key, count=2):
     """Return up to `count` most recent non-missing observations, newest first.
 
@@ -120,6 +166,31 @@ def fetch_latest_observations(series_id, api_key, count=2):
     return valid[:count]
 
 
+def _finish_derived_entry(base, points, history_count):
+    """Shape an already-computed newest-first [{date, value}] list into the
+    same entry format the other transforms return.
+    """
+    if not points:
+        return {**base, "error": "no data"}
+
+    value = points[0]["value"]
+    prev_value = points[1]["value"] if len(points) > 1 else None
+    change = round(value - prev_value, 4) if prev_value is not None else None
+
+    result = {
+        **base,
+        "date": points[0]["date"],
+        "value": value,
+        "prev_value": prev_value,
+        "change": change,
+    }
+
+    if history_count:
+        result["history"] = list(reversed(points[:history_count]))
+
+    return result
+
+
 def build_series_entry(meta, api_key):
     """Fetch and format one series. Supported transforms:
 
@@ -131,6 +202,12 @@ def build_series_entry(meta, api_key):
       observations (e.g. nonfarm payrolls' "+180K jobs"), for series whose
       raw level is a cumulative stock rather than a meaningful headline
       number on its own.
+    - "spread": this series minus the one named by "minus_id", aligned by
+      observation date, for gaps FRED doesn't publish as their own series.
+    - "drawdown": percent below the highest value in the trailing "window"
+      observations (0 = sitting at the window high).
+    - "change_over": change vs. the observation "lookback" periods back,
+      for trends a single day-over-day change can't show.
 
     Any transform can also set "history_count" to fetch that many chart
     points (chronologically ordered under a "history" key), reusing the
@@ -142,6 +219,65 @@ def build_series_entry(meta, api_key):
     transform = meta.get("transform", "level")
     scale = meta.get("scale", 1)
     history_count = meta.get("history_count")
+
+    if transform == "spread":
+        fetch_count = max(2, history_count) if history_count else 2
+
+        try:
+            minuend = fetch_latest_observations(meta["id"], api_key, count=fetch_count)
+            subtrahend = fetch_latest_observations(meta["minus_id"], api_key, count=fetch_count)
+        except Exception:
+            minuend, subtrahend = [], []
+
+        # Align by date: the two series share a publication calendar, but a
+        # day missing from one shouldn't silently pair up mismatched dates.
+        by_date = {obs["date"]: float(obs["value"]) for obs in subtrahend}
+        points = [
+            {"date": obs["date"], "value": round((float(obs["value"]) - by_date[obs["date"]]) * scale, 4)}
+            for obs in minuend
+            if obs["date"] in by_date
+        ]
+
+        return _finish_derived_entry(base, points, history_count)
+
+    if transform == "drawdown":
+        window = meta.get("window", 252)
+        fetch_count = history_count + window if history_count else window
+
+        try:
+            observations = fetch_latest_observations(meta["id"], api_key, count=fetch_count)
+        except Exception:
+            observations = []
+
+        values = [float(obs["value"]) for obs in observations]
+        # observations are newest-first, so the trailing window for point i
+        # is the slice that starts at i.
+        points = [
+            {
+                "date": observations[i]["date"],
+                "value": round((values[i] / max(values[i:i + window]) - 1) * 100, 4),
+            }
+            for i in range(len(values) - window + 1)
+        ]
+
+        return _finish_derived_entry(base, points, history_count)
+
+    if transform == "change_over":
+        lookback = meta.get("lookback", 20)
+        fetch_count = history_count + lookback if history_count else lookback + 1
+
+        try:
+            observations = fetch_latest_observations(meta["id"], api_key, count=fetch_count)
+        except Exception:
+            observations = []
+
+        values = [float(obs["value"]) for obs in observations]
+        points = [
+            {"date": observations[i]["date"], "value": round((values[i] - values[i + lookback]) * scale, 4)}
+            for i in range(len(values) - lookback)
+        ]
+
+        return _finish_derived_entry(base, points, history_count)
 
     if transform == "yoy":
         min_count = 14
@@ -250,8 +386,36 @@ def build_series_entry(meta, api_key):
     return result
 
 
+def build_yahoo_series_entry(meta):
+    """Same entry shape as build_series_entry, for indices FRED doesn't
+    carry (currently just MOVE). Uses daily closes from Yahoo Finance.
+    """
+    base = {"name": meta["name"], "prefix": meta.get("prefix", ""), "unit": meta.get("unit", "")}
+    scale = meta.get("scale", 1)
+
+    try:
+        history = yf.Ticker(meta["id"]).history(period=meta.get("period", "2y"), auto_adjust=True)
+        closes = list(history["Close"].dropna().items())
+    except Exception:
+        closes = []
+
+    # Yahoo returns oldest-first; _finish_derived_entry expects newest-first.
+    points = [
+        {"date": index.strftime("%Y-%m-%d"), "value": round(float(close) * scale, 4)}
+        for index, close in reversed(closes)
+    ]
+
+    return _finish_derived_entry(base, points, meta.get("history_count"))
+
+
 def build_macro_data(api_key):
-    series_data = {meta["id"]: build_series_entry(meta, api_key) for meta in MACRO_SERIES}
+    series_data = {}
+    for meta in MACRO_SERIES:
+        if meta.get("source") == "yahoo":
+            series_data[series_key(meta)] = build_yahoo_series_entry(meta)
+        else:
+            series_data[series_key(meta)] = build_series_entry(meta, api_key)
+
     return {
         "updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "series": series_data,
