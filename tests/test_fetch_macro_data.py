@@ -1,10 +1,33 @@
 import json
 import shutil
 import unittest
+from datetime import date, timedelta
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
+
+import pandas as pd
 
 import fetch_macro_data
+
+
+def daily_observations(values, start="2026-08-21"):
+    """Newest-first observations on consecutive days, for the transforms
+    that need more history than is practical to spell out by hand.
+    """
+    first = date.fromisoformat(start)
+    return [
+        {"date": (first - timedelta(days=offset)).isoformat(), "value": str(value)}
+        for offset, value in enumerate(values)
+    ]
+
+
+# drawdown(window=252): newest value 95 against a window high of 100 is
+# -5%; the 300 entries leave 49 points once the window is consumed.
+FAKE_SP500_VALUES = [95.0, 96.0, 100.0] + [90.0] * 297
+
+# change_over(lookback=20): 3.20 now vs 3.00 twenty entries back = +0.20%p
+# (+20bp); the entry before that is 3.15 vs 3.00 = +15bp, so change = +5.
+FAKE_HY_OAS_VALUES = [3.20, 3.15] + [3.10] * 18 + [3.00, 3.00] + [2.95] * 8
 
 FAKE_OBSERVATIONS = {
     "DGS10": [{"date": "2026-08-21", "value": "4.32"}, {"date": "2026-08-20", "value": "4.28"}],
@@ -29,7 +52,21 @@ FAKE_OBSERVATIONS = {
     ],
     "RPONTSYD": [{"date": "2026-08-21", "value": "12.5"}, {"date": "2026-08-20", "value": "8.0"}],
     "WALCL": [{"date": "2026-08-20", "value": "6634567"}, {"date": "2026-08-13", "value": "6640123"}],
-    "BAMLH0A0HYM2": [{"date": "2026-08-21", "value": "3.20"}, {"date": "2026-08-20", "value": "3.15"}],
+    "BAMLH0A0HYM2": daily_observations(FAKE_HY_OAS_VALUES),
+    "SP500": daily_observations(FAKE_SP500_VALUES),
+    # CCC minus BB: 5.40 / 5.35 / 5.30. The oldest CCC entry has no BB
+    # counterpart, so it should be dropped rather than mispaired.
+    "BAMLH0A3HYC": [
+        {"date": "2026-08-21", "value": "7.50"},
+        {"date": "2026-08-20", "value": "7.40"},
+        {"date": "2026-08-19", "value": "7.30"},
+        {"date": "2026-08-18", "value": "7.20"},
+    ],
+    "BAMLH0A1HYBB": [
+        {"date": "2026-08-21", "value": "2.10"},
+        {"date": "2026-08-20", "value": "2.05"},
+        {"date": "2026-08-19", "value": "2.00"},
+    ],
     "BAA10Y": [{"date": "2026-08-21", "value": "1.85"}, {"date": "2026-08-20", "value": "1.80"}],
     "NFCI": [{"date": "2026-08-14", "value": "-0.35"}, {"date": "2026-08-07", "value": "-0.30"}],
     "STLFSI4": [{"date": "2026-08-14", "value": "-0.55"}, {"date": "2026-08-07", "value": "-0.50"}],
@@ -84,6 +121,19 @@ def fake_fetch(series_id, api_key, count=2):
 
 
 class FetchMacroDataTests(unittest.TestCase):
+    def setUp(self):
+        # MACRO_SERIES has a Yahoo-sourced entry (MOVE) that bypasses
+        # fetch_latest_observations, so stub yfinance for every test to keep
+        # build_macro_data() off the network.
+        fake_ticker = MagicMock()
+        fake_ticker.history.return_value = pd.DataFrame(
+            {"Close": [70.0, 72.0, 74.5]},
+            index=pd.to_datetime(["2026-08-19", "2026-08-20", "2026-08-21"]),
+        )
+        patcher = patch("fetch_macro_data.yf.Ticker", return_value=fake_ticker)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_build_macro_data_level_series(self):
         with patch("fetch_macro_data.fetch_latest_observations", side_effect=fake_fetch):
             data = fetch_macro_data.build_macro_data("fake-key")
@@ -132,10 +182,11 @@ class FetchMacroDataTests(unittest.TestCase):
             data = fetch_macro_data.build_macro_data("fake-key")
 
         for meta in fetch_macro_data.MACRO_SERIES:
-            entry = data["series"][meta["id"]]
-            self.assertNotIn("error", entry, msg=meta["id"])
-            self.assertIn("history", entry, msg=meta["id"])
-            self.assertGreater(len(entry["history"]), 0, msg=meta["id"])
+            key = fetch_macro_data.series_key(meta)
+            entry = data["series"][key]
+            self.assertNotIn("error", entry, msg=key)
+            self.assertIn("history", entry, msg=key)
+            self.assertGreater(len(entry["history"]), 0, msg=key)
 
     def test_level_series_history_is_chronological(self):
         with patch("fetch_macro_data.fetch_latest_observations", side_effect=fake_fetch):
@@ -189,11 +240,63 @@ class FetchMacroDataTests(unittest.TestCase):
         self.assertEqual(srf["prefix"], "$")
         self.assertEqual(srf["unit"], "B")
 
+    def test_spread_series_subtracts_aligned_dates(self):
+        with patch("fetch_macro_data.fetch_latest_observations", side_effect=fake_fetch):
+            data = fetch_macro_data.build_macro_data("fake-key")
+
+        gap = data["series"]["HY_CCC_BB_GAP"]
+        self.assertAlmostEqual(gap["value"], 5.40)  # 7.50 - 2.10
+        self.assertAlmostEqual(gap["prev_value"], 5.35)  # 7.40 - 2.05
+        self.assertAlmostEqual(gap["change"], 0.05)
+        self.assertEqual(gap["unit"], "%p")
+        # 2026-08-18 exists only in the CCC series, so it's dropped.
+        self.assertEqual([p["date"] for p in gap["history"]], ["2026-08-19", "2026-08-20", "2026-08-21"])
+
+    def test_drawdown_series_measures_distance_below_window_high(self):
+        with patch("fetch_macro_data.fetch_latest_observations", side_effect=fake_fetch):
+            data = fetch_macro_data.build_macro_data("fake-key")
+
+        drawdown = data["series"]["SP500_DRAWDOWN"]
+        self.assertAlmostEqual(drawdown["value"], -5.0)  # 95 vs a window high of 100
+        self.assertAlmostEqual(drawdown["prev_value"], -4.0)  # 96 vs 100
+        self.assertAlmostEqual(drawdown["change"], -1.0)
+        # 300 observations minus the 252-wide window leaves 49 points.
+        self.assertEqual(len(drawdown["history"]), 49)
+        self.assertAlmostEqual(drawdown["history"][-1]["value"], -5.0)
+
+    def test_change_over_series_uses_lookback_window(self):
+        with patch("fetch_macro_data.fetch_latest_observations", side_effect=fake_fetch):
+            data = fetch_macro_data.build_macro_data("fake-key")
+
+        move_20d = data["series"]["HY_OAS_20D"]
+        self.assertAlmostEqual(move_20d["value"], 20.0)  # (3.20 - 3.00) * 100 bp
+        self.assertAlmostEqual(move_20d["prev_value"], 15.0)  # (3.15 - 3.00) * 100 bp
+        self.assertAlmostEqual(move_20d["change"], 5.0)
+        self.assertEqual(move_20d["unit"], "bp")
+
+    def test_yahoo_sourced_series_uses_daily_closes(self):
+        with patch("fetch_macro_data.fetch_latest_observations", side_effect=fake_fetch):
+            data = fetch_macro_data.build_macro_data("fake-key")
+
+        move = data["series"]["^MOVE"]
+        self.assertAlmostEqual(move["value"], 74.5)
+        self.assertAlmostEqual(move["prev_value"], 72.0)
+        self.assertAlmostEqual(move["change"], 2.5)
+        # Yahoo hands back oldest-first; history stays chronological either way.
+        self.assertEqual([p["date"] for p in move["history"]], ["2026-08-19", "2026-08-20", "2026-08-21"])
+
+    def test_yahoo_sourced_series_handles_fetch_failure(self):
+        with patch("fetch_macro_data.yf.Ticker", side_effect=RuntimeError("network error")):
+            move_meta = next(m for m in fetch_macro_data.MACRO_SERIES if m.get("source") == "yahoo")
+            entry = fetch_macro_data.build_yahoo_series_entry(move_meta)
+
+        self.assertEqual(entry["error"], "no data")
+
     def test_build_macro_data_covers_all_configured_series(self):
         with patch("fetch_macro_data.fetch_latest_observations", side_effect=fake_fetch):
             data = fetch_macro_data.build_macro_data("fake-key")
 
-        expected_ids = {meta["id"] for meta in fetch_macro_data.MACRO_SERIES}
+        expected_ids = {fetch_macro_data.series_key(meta) for meta in fetch_macro_data.MACRO_SERIES}
         self.assertEqual(set(data["series"].keys()), expected_ids)
         self.assertNotIn("VIXCLS", data["series"])
         self.assertNotIn("NASDAQCOM", data["series"])
