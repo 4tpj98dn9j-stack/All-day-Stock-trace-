@@ -112,6 +112,81 @@ h1 {
   color: #444;
 }
 
+.scoos-quarter {
+  font-size: 0.75rem;
+  color: #999;
+  font-weight: 400;
+}
+
+.scoos-group {
+  margin-bottom: 18px;
+}
+
+.scoos-group:last-child {
+  margin-bottom: 0;
+}
+
+.scoos-group-title {
+  font-size: 0.9rem;
+  margin: 0 0 4px;
+  color: #333;
+}
+
+.scoos-group-desc {
+  margin: 0 0 10px;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: #777;
+}
+
+.scoos-panel {
+  margin-bottom: 14px;
+}
+
+.scoos-panel:last-child {
+  margin-bottom: 0;
+}
+
+.scoos-panel-title {
+  font-size: 0.8rem;
+  color: #555;
+  margin-bottom: 4px;
+}
+
+.scoos-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-bottom: 4px;
+  font-size: 0.72rem;
+  color: #666;
+}
+
+.scoos-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.scoos-legend-line {
+  display: inline-block;
+  width: 18px;
+  border-top-width: 2px;
+}
+
+.scoos-chart {
+  display: block;
+  width: 100%;
+  height: 150px;
+  touch-action: pan-y;
+}
+
+.scoos-source {
+  margin: 4px 0 0;
+  font-size: 0.7rem;
+  color: #999;
+}
+
 .daily-report-section {
   background: #fff;
   border-radius: 12px;

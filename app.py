@@ -30,6 +30,7 @@ INDICES = [
 
 DAILY_REPORT_DIR = Path("daily")
 MACRO_DATA_PATH = Path("data/macro.json")
+SCOOS_DATA_PATH = Path("data/scoos.json")
 
 NEWS_LIMIT = 5
 
@@ -141,6 +142,21 @@ def macro_data_endpoint():
         content = json.loads(MACRO_DATA_PATH.read_text(encoding="utf-8"))
     except Exception as exc:
         app.logger.warning("Failed to read macro data %s: %s", MACRO_DATA_PATH, exc)
+        return jsonify({"error": "no data"}), 404
+
+    return jsonify(content)
+
+
+@app.route("/api/scoos-data")
+def scoos_data_endpoint():
+    """Return the most recently committed data/scoos.json (see fetch_scoos_data.py)."""
+    if not SCOOS_DATA_PATH.is_file():
+        return jsonify({"error": "no data"}), 404
+
+    try:
+        content = json.loads(SCOOS_DATA_PATH.read_text(encoding="utf-8"))
+    except Exception as exc:
+        app.logger.warning("Failed to read SCOOS data %s: %s", SCOOS_DATA_PATH, exc)
         return jsonify({"error": "no data"}), 404
 
     return jsonify(content)
