@@ -14,13 +14,15 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: List FRED SCOOS release series
+      - name: Inspect FRED SCOOS release series
         env:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
         run: |
           python - <<'PY'
+          import collections
           import json
           import os
+          import re
           import urllib.parse
           import urllib.request
 
@@ -45,6 +47,40 @@ jobs:
               offset += 1000
 
           print("TOTAL SCOOS SERIES:", len(rows))
-          for s in rows:
-              print(f"{s['id']}\t{s['frequency_short']}\t{s['units_short']}\t{s['title']}")
+          print()
+          print("UNITS HISTOGRAM:")
+          for unit, n in collections.Counter(r["units_short"] for r in rows).most_common():
+              print(f"  {n:5d}  {unit}")
+          print()
+          print("ID SUFFIX HISTOGRAM (trailing letters after the last digit):")
+          suffixes = collections.Counter(
+              re.sub(r"^.*\d", "", r["id"]) for r in rows
+          )
+          for suf, n in suffixes.most_common(30):
+              print(f"  {n:5d}  {suf!r}")
+          print()
+
+          nonnr = [r for r in rows if r["units_short"] != "Number of Respondents"]
+          print("NON-RESPONDENT-COUNT SERIES:", len(nonnr))
+          for r in nonnr[:200]:
+              print(f"{r['id']}\t{r['units_short']}\t{r['title'][:160]}")
+          print()
+
+          print("QUESTIONS MENTIONING LIQUIDITY AND FUNCTIONING:")
+          seen = set()
+          for r in rows:
+              m = re.match(r"^(\d+)\)\s*(.*?)(?:\||$)", r["title"])
+              if m and "liquidity and functioning" in r["title"].lower():
+                  if m.group(1) not in seen:
+                      seen.add(m.group(1))
+                      print(f"  Q{m.group(1)}: {m.group(2)[:140]}")
+          print()
+          print("QUESTIONS MENTIONING DEMAND FOR TERM FUNDING:")
+          seen = set()
+          for r in rows:
+              m = re.match(r"^(\d+)\)\s*(.*?)(?:\||$)", r["title"])
+              if m and "demand for term funding" in r["title"].lower():
+                  if m.group(1) not in seen:
+                      seen.add(m.group(1))
+                      print(f"  Q{m.group(1)}: {m.group(2)[:140]}")
           PY
