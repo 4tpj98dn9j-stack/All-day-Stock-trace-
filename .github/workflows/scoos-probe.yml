@@ -1,9 +1,5 @@
 name: SCOOS Probe (temporary)
 
-# Throwaway workflow: the sandbox can't reach federalreserve.gov or FRED, so
-# this runs on a GitHub runner just to discover how SCOOS data is published.
-# Delete once fetch_scoos_data.py is written.
-
 on:
   push:
     branches:
@@ -19,7 +15,6 @@ jobs:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
         run: |
           python - <<'PY'
-          import collections
           import json
           import os
           import re
@@ -46,41 +41,35 @@ jobs:
                   break
               offset += 1000
 
-          print("TOTAL SCOOS SERIES:", len(rows))
-          print()
-          print("UNITS HISTOGRAM:")
-          for unit, n in collections.Counter(r["units_short"] for r in rows).most_common():
-              print(f"  {n:5d}  {unit}")
-          print()
-          print("ID SUFFIX HISTOGRAM (trailing letters after the last digit):")
-          suffixes = collections.Counter(
-              re.sub(r"^.*\d", "", r["id"]) for r in rows
-          )
-          for suf, n in suffixes.most_common(30):
-              print(f"  {n:5d}  {suf!r}")
+          by_id = {r["id"]: r for r in rows}
+
+          print("### SERIES WHOSE ID ENDS IN 'NP'")
+          for r in rows:
+              if r["id"].endswith("NP"):
+                  print(f"{r['id']}\t{r['units_short']}\t{r['title'][:200]}")
           print()
 
-          nonnr = [r for r in rows if r["units_short"] != "Number of Respondents"]
-          print("NON-RESPONDENT-COUNT SERIES:", len(nonnr))
-          for r in nonnr[:200]:
-              print(f"{r['id']}\t{r['units_short']}\t{r['title'][:160]}")
+          print("### QUESTIONS MENTIONING EQUITIES + (DEMAND|LIQUIDITY)")
+          seen = set()
+          for r in rows:
+              t = r["title"].lower()
+              if "equit" in t and ("demand" in t or "liquidity" in t):
+                  m = re.match(r"^(\d+)\)", r["title"])
+                  q = m.group(1) if m else "?"
+                  if q not in seen:
+                      seen.add(q)
+                      print(f"  Q{q}: {r['title'][:200]}")
           print()
 
-          print("QUESTIONS MENTIONING LIQUIDITY AND FUNCTIONING:")
-          seen = set()
-          for r in rows:
-              m = re.match(r"^(\d+)\)\s*(.*?)(?:\||$)", r["title"])
-              if m and "liquidity and functioning" in r["title"].lower():
-                  if m.group(1) not in seen:
-                      seen.add(m.group(1))
-                      print(f"  Q{m.group(1)}: {m.group(2)[:140]}")
-          print()
-          print("QUESTIONS MENTIONING DEMAND FOR TERM FUNDING:")
-          seen = set()
-          for r in rows:
-              m = re.match(r"^(\d+)\)\s*(.*?)(?:\||$)", r["title"])
-              if m and "demand for term funding" in r["title"].lower():
-                  if m.group(1) not in seen:
-                      seen.add(m.group(1))
-                      print(f"  Q{m.group(1)}: {m.group(2)[:140]}")
+          for q in [54, 55, 58, 59, 64, 65, 68, 69, 72, 73, 76, 77]:
+              print(f"### Q{q} SERIES")
+              for r in rows:
+                  if r["title"].startswith(f"{q})"):
+                      answer = r["title"].split("Answer Type:")[-1].strip()
+                      print(f"  {r['id']}\t{r['observation_start']}..{r['observation_end']}\t{answer}")
+              print()
+
+          print("### SAMPLE OBSERVATIONS for SFQ77PNNR")
+          obs = fred("series/observations", series_id="SFQ77PNNR", sort_order="desc", limit=6)
+          print(json.dumps(obs["observations"], indent=1))
           PY
