@@ -230,6 +230,325 @@ async function loadMacroData() {
   }
 }
 
+// Categorical palette for the SCOOS panels, capped at three series because
+// that's the widest set that stays distinguishable under colour-vision
+// deficiency. Each slot also gets its own dash pattern, so identity never
+// rests on hue alone.
+const SCOOS_SERIES_COLORS = ["#2a78d6", "#eb6834", "#1baf7a"];
+const SCOOS_SERIES_DASHES = [[], [6, 4], [2, 3]];
+
+// Every rendered SCOOS panel, kept so a resize (or a hover leaving the
+// canvas) can redraw them without refetching.
+const scoosPanels = [];
+
+function formatNetPercent(value) {
+  return `${value > 0 ? "+" : ""}${value.toFixed(1)}`;
+}
+
+function quarterLabel(dateStr) {
+  const [year, month] = dateStr.split("-").map(Number);
+  return `${year} Q${Math.floor((month - 1) / 3) + 1}`;
+}
+
+async function loadScoosData() {
+  const groupsEl = document.getElementById("scoos-groups");
+  const quarterEl = document.getElementById("scoos-quarter");
+  const sourceEl = document.getElementById("scoos-source");
+
+  scoosPanels.length = 0;
+
+  try {
+    const res = await fetch("/api/scoos-data");
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+    const data = await res.json();
+
+    quarterEl.textContent = data.latest_quarter ? `${data.latest_quarter} 기준` : "";
+    sourceEl.textContent = `출처: ${data.source || "Federal Reserve Board, SCOOS"} · ${data.unit || "순비율(%)"}, 분기`;
+
+    groupsEl.innerHTML = "";
+    (data.groups || []).forEach((group) => {
+      const groupEl = document.createElement("div");
+      groupEl.className = "scoos-group";
+      groupEl.innerHTML = `
+        <h3 class="scoos-group-title">${escapeHtml(group.title)}</h3>
+        <p class="scoos-group-desc">${escapeHtml(group.description || "")}</p>
+      `;
+
+      (group.panels || []).forEach((panel) => {
+        const drawable = (panel.series || []).filter(
+          (s) => !s.error && s.history && s.history.length > 1,
+        );
+        if (!drawable.length) {
+          return;
+        }
+        groupEl.appendChild(buildScoosPanel(panel.title, drawable));
+      });
+
+      groupsEl.appendChild(groupEl);
+    });
+
+    redrawScoosPanels();
+  } catch (err) {
+    groupsEl.innerHTML = `<div class="error">SCOOS 데이터를 불러오지 못했습니다.</div>`;
+    quarterEl.textContent = "";
+    sourceEl.textContent = "";
+  }
+}
+
+function buildScoosPanel(title, series) {
+  const panelEl = document.createElement("div");
+  panelEl.className = "scoos-panel";
+
+  // A lone series is already named by the panel title, so a legend
+  // repeating it would just be noise.
+  const legend = series.length < 2
+    ? ""
+    : `<div class="scoos-legend">${series
+        .map((s, i) => {
+          const style = ["solid", "dashed", "dotted"][i] || "solid";
+          return `
+            <span class="scoos-legend-item">
+              <span class="scoos-legend-line" style="border-top-color:${SCOOS_SERIES_COLORS[i]};border-top-style:${style}"></span>
+              ${escapeHtml(s.name)}
+            </span>
+          `;
+        })
+        .join("")}</div>`;
+
+  panelEl.innerHTML = `
+    <div class="scoos-panel-title">${escapeHtml(title)}</div>
+    ${legend}
+    <canvas class="scoos-chart"></canvas>
+  `;
+
+  const canvas = panelEl.querySelector(".scoos-chart");
+
+  // All the panel's series share the survey calendar, but build the date
+  // axis as a union anyway so a series that starts late (or skips a
+  // quarter) lines up instead of shifting the whole line sideways.
+  const dates = [...new Set(series.flatMap((s) => s.history.map((p) => p.date)))].sort();
+  const lines = series.map((s) => {
+    const byDate = new Map(s.history.map((p) => [p.date, p.value]));
+    return { name: s.name, values: dates.map((d) => (byDate.has(d) ? byDate.get(d) : null)) };
+  });
+
+  const state = { canvas, dates, lines, highlight: null };
+  scoosPanels.push(state);
+
+  const pick = (event) => {
+    const rect = canvas.getBoundingClientRect();
+    state.highlight = nearestScoosIndex(state, event.clientX - rect.left, rect.width);
+    drawScoosChart(state);
+  };
+  canvas.addEventListener("pointerdown", pick);
+  canvas.addEventListener("pointermove", (event) => {
+    // Touch only tracks while the finger is down; a mouse tracks always.
+    if (event.pointerType === "mouse" || event.buttons) {
+      pick(event);
+    }
+  });
+  canvas.addEventListener("pointerleave", () => {
+    state.highlight = null;
+    drawScoosChart(state);
+  });
+
+  return panelEl;
+}
+
+const SCOOS_PAD = { left: 30, right: 8, top: 8, bottom: 18 };
+
+function nearestScoosIndex(state, x, width) {
+  const plotWidth = Math.max(width - SCOOS_PAD.left - SCOOS_PAD.right, 1);
+  const stepX = plotWidth / Math.max(state.dates.length - 1, 1);
+  const index = Math.round((x - SCOOS_PAD.left) / stepX);
+  return Math.min(Math.max(index, 0), state.dates.length - 1);
+}
+
+function niceAxisScale(min, max, targetTicks = 4) {
+  const span = Math.max(max - min, 1);
+  const rough = span / targetTicks;
+  const magnitude = Math.pow(10, Math.floor(Math.log10(rough)));
+  const step = [1, 2, 2.5, 5, 10].map((m) => m * magnitude).find((s) => s >= rough) || 10 * magnitude;
+  return { lo: Math.floor(min / step) * step, hi: Math.ceil(max / step) * step, step };
+}
+
+function scoosYearTicks(dates) {
+  // Label the first quarter of every other year, matching the Fed's own
+  // exhibit charts; fall back to every year for a short series.
+  const firstQuarters = dates
+    .map((date, index) => ({ date, index }))
+    .filter(({ date }) => date.endsWith("-01-01"));
+  const everyOther = firstQuarters.filter(({ date }) => Number(date.slice(0, 4)) % 2 === 0);
+  const chosen = everyOther.length >= 3 ? everyOther : firstQuarters;
+  return chosen.map(({ date, index }) => ({ index, label: date.slice(0, 4) }));
+}
+
+function drawScoosChart(state) {
+  const { canvas, dates, lines, highlight } = state;
+  const ctx = canvas.getContext("2d");
+  const dpr = window.devicePixelRatio || 1;
+  const width = canvas.clientWidth || 300;
+  const height = canvas.clientHeight || 150;
+
+  canvas.width = width * dpr;
+  canvas.height = height * dpr;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, width, height);
+
+  const allValues = lines.flatMap((line) => line.values.filter((v) => v != null));
+  if (!allValues.length) {
+    return;
+  }
+
+  // Always include zero -- these are net percentages, and the sign is the
+  // whole point, so a scale that floats off the zero line would mislead.
+  const { lo, hi, step } = niceAxisScale(Math.min(0, ...allValues), Math.max(0, ...allValues));
+  const valueRange = hi - lo || 1;
+
+  const plotWidth = Math.max(width - SCOOS_PAD.left - SCOOS_PAD.right, 1);
+  const plotHeight = Math.max(height - SCOOS_PAD.top - SCOOS_PAD.bottom, 1);
+  const stepX = plotWidth / Math.max(dates.length - 1, 1);
+  const toX = (i) => SCOOS_PAD.left + i * stepX;
+  const toY = (v) => SCOOS_PAD.top + plotHeight - ((v - lo) / valueRange) * plotHeight;
+
+  ctx.font = "10px -apple-system, sans-serif";
+  ctx.textAlign = "right";
+  ctx.textBaseline = "middle";
+  for (let v = lo; v <= hi + step / 2; v += step) {
+    const y = toY(v);
+    ctx.beginPath();
+    ctx.moveTo(SCOOS_PAD.left, y);
+    ctx.lineTo(width - SCOOS_PAD.right, y);
+    ctx.strokeStyle = Math.abs(v) < step / 2 ? "#c7c7cc" : "#ececee";
+    ctx.lineWidth = 1;
+    ctx.setLineDash([]);
+    ctx.stroke();
+    ctx.fillStyle = "#999";
+    ctx.fillText(String(Math.round(v)), SCOOS_PAD.left - 5, y);
+  }
+
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  ctx.fillStyle = "#999";
+  scoosYearTicks(dates).forEach((tick) => {
+    ctx.fillText(tick.label, toX(tick.index), height - SCOOS_PAD.bottom + 4);
+  });
+
+  lines.forEach((line, i) => {
+    ctx.beginPath();
+    let drawing = false;
+    line.values.forEach((value, index) => {
+      if (value == null) {
+        drawing = false;
+        return;
+      }
+      const x = toX(index);
+      const y = toY(value);
+      if (drawing) {
+        ctx.lineTo(x, y);
+      } else {
+        ctx.moveTo(x, y);
+        drawing = true;
+      }
+    });
+    ctx.strokeStyle = SCOOS_SERIES_COLORS[i % SCOOS_SERIES_COLORS.length];
+    ctx.setLineDash(SCOOS_SERIES_DASHES[i % SCOOS_SERIES_DASHES.length]);
+    ctx.lineWidth = 2;
+    ctx.lineJoin = "round";
+    ctx.stroke();
+  });
+  ctx.setLineDash([]);
+
+  if (highlight != null) {
+    drawScoosTooltip(ctx, { width, height, toX, toY, dates, lines, highlight });
+  }
+}
+
+function drawScoosTooltip(ctx, { width, height, toX, toY, dates, lines, highlight }) {
+  const x = toX(highlight);
+
+  ctx.beginPath();
+  ctx.moveTo(x, SCOOS_PAD.top);
+  ctx.lineTo(x, height - SCOOS_PAD.bottom);
+  ctx.strokeStyle = "#c7c7cc";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  const rows = [];
+  lines.forEach((line, i) => {
+    const value = line.values[highlight];
+    if (value == null) {
+      return;
+    }
+    const color = SCOOS_SERIES_COLORS[i % SCOOS_SERIES_COLORS.length];
+    rows.push({ color, text: `${line.name}: ${formatNetPercent(value)}` });
+
+    // 2px surface ring so a marker stays readable where two lines cross.
+    const y = toY(value);
+    ctx.beginPath();
+    ctx.arc(x, y, 4.5, 0, Math.PI * 2);
+    ctx.fillStyle = "#fff";
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x, y, 3, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+  });
+
+  if (!rows.length) {
+    return;
+  }
+
+  const title = quarterLabel(dates[highlight]);
+  const padding = 7;
+  const swatch = 9;
+  const lineHeight = 15;
+
+  ctx.font = "bold 11px -apple-system, sans-serif";
+  let boxWidth = ctx.measureText(title).width;
+  ctx.font = "11px -apple-system, sans-serif";
+  rows.forEach((row) => {
+    boxWidth = Math.max(boxWidth, swatch + 5 + ctx.measureText(row.text).width);
+  });
+  boxWidth += padding * 2;
+  const boxHeight = padding * 2 + lineHeight * (rows.length + 1);
+
+  // Sit to the right of the crosshair, but flip to its left rather than
+  // clamp when that would run off the canvas -- clamping would park the box
+  // right on top of the most recent quarters, which is what you're usually
+  // pointing at.
+  const flip = x + 10 + boxWidth > width - 2;
+  const boxX = Math.max(flip ? x - 10 - boxWidth : x + 10, 2);
+  const boxY = Math.min(SCOOS_PAD.top + 4, height - boxHeight - 2);
+
+  ctx.fillStyle = "rgba(40, 40, 42, 0.92)";
+  ctx.beginPath();
+  ctx.roundRect(boxX, boxY, boxWidth, boxHeight, 5);
+  ctx.fill();
+
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = "#fff";
+  ctx.font = "bold 11px -apple-system, sans-serif";
+  ctx.fillText(title, boxX + padding, boxY + padding + lineHeight / 2);
+
+  ctx.font = "11px -apple-system, sans-serif";
+  rows.forEach((row, i) => {
+    const y = boxY + padding + lineHeight * (i + 1) + lineHeight / 2;
+    ctx.fillStyle = row.color;
+    ctx.fillRect(boxX + padding, y - swatch / 2, swatch, swatch);
+    ctx.fillStyle = "#fff";
+    ctx.fillText(row.text, boxX + padding + swatch + 5, y);
+  });
+}
+
+function redrawScoosPanels() {
+  scoosPanels.forEach(drawScoosChart);
+}
+
 async function loadMarketSummary() {
   const indicesEl = document.getElementById("market-indices");
   const commentEl = document.getElementById("market-comment");
@@ -322,7 +641,13 @@ async function refreshAll() {
   btn.textContent = "불러오는 중...";
 
   try {
-    await Promise.all([loadMarketSummary(), loadMacroData(), loadQuotes(), loadDailyReport()]);
+    await Promise.all([
+      loadMarketSummary(),
+      loadMacroData(),
+      loadScoosData(),
+      loadQuotes(),
+      loadDailyReport(),
+    ]);
   } finally {
     btn.disabled = false;
     btn.textContent = "새로고침";
@@ -723,6 +1048,14 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
     closeDetail();
   }
+});
+
+// The SCOOS charts are laid out inline (not in a modal), so they have to
+// re-render at the new width when the window or phone orientation changes.
+let scoosResizeTimer = null;
+window.addEventListener("resize", () => {
+  clearTimeout(scoosResizeTimer);
+  scoosResizeTimer = setTimeout(redrawScoosPanels, 150);
 });
 
 window.addEventListener("DOMContentLoaded", refreshAll);
