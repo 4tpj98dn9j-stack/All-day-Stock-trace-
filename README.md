@@ -39,6 +39,11 @@ pip install -r requirements.txt
   export FRED_API_KEY=...   # 또는 .env 파일에 FRED_API_KEY=... 저장
   python fetch_macro_data.py
   ```
+- `fetch_scoos_data.py` — 연준의 SCOOS(딜러 자금조달 여건 설문) 분기 결과를 가져와 `data/scoos.json`으로 저장
+  ```bash
+  export FRED_API_KEY=...
+  python fetch_scoos_data.py
+  ```
 
 ## 매일 마감 리포트 자동화
 
@@ -64,6 +69,24 @@ pip install -r requirements.txt
 - 일부 지표는 FRED 원본 시리즈가 아니라 계산해서 만듭니다: `spread`(두 시리즈의 차이 — 등급 격차), `drawdown`(직전 N개 관측치 중 고점 대비 %  — S&P500 52주 고점 대비), `change_over`(N기간 전 대비 변화 — HY 스프레드 20일 변화). 과거 구간 전체에 대해 같은 계산을 반복해서 차트도 함께 만듭니다.
 - 참고: "에너지 제외 하이일드 스프레드(ex-energy HY OAS)"는 넣지 못했습니다. FRED는 하이일드를 **신용등급별**(BB/B/CCC)로만 쪼개서 제공하고 **섹터별** 시리즈는 없어서, 직접 계산하려면 지수 편입 채권별 섹터 분류와 시가총액 가중치가 필요한데 무료 소스로는 구할 수 없습니다.
 - 모든 매크로 지표는 클릭하면 시계열 차트가 뜹니다 (`MACRO_SERIES`의 `history_count`로 제어) — 일간 시리즈는 최근 2년(500개), 주간 시리즈는 최근 5년(260개), 월간 시리즈는 최근 5년(60개)치를 보여줍니다. CPI/PAYEMS/INDPRO처럼 전년비·전월비로 계산되는 시리즈는 과거 구간 전체에 대해 같은 방식으로 재계산해서 차트를 만듭니다.
+
+## SCOOS 자동화 (딜러 자금조달 여건)
+
+`.github/workflows/scoos-data.yml`이 매주 월요일 22:30 UTC에 `fetch_scoos_data.py`를 실행해서 `data/scoos.json`을 커밋·푸시합니다. SCOOS는 분기 설문이라 값 자체는 분기에 한 번만 바뀌지만, 발표 시점이 분기말 기준 몇 주 뒤로 유동적이라 주 1회 확인합니다. FRED를 쓰므로 `FRED_API_KEY` 시크릿을 그대로 재사용합니다.
+
+SCOOS(Senior Credit Officer Opinion Survey on Dealer Financing Terms)는 헤지펀드·REIT 등에 자금을 대주는 대형 딜러들을 대상으로 한 연준의 분기 설문입니다. 스프레드·MOVE 같은 시장 가격 지표가 간접적으로만 보여주는 "신용시장 뒷단의 자금 사정"을 딜러들이 직접 답한 자료라, 매크로 지표와 성격이 다릅니다.
+
+대시보드는 두 그룹으로 보여줍니다:
+
+- **기초시장 유동성·기능 개선 응답** — 투자등급/하이일드 회사채, CMBS, Agency/Non-agency RMBS, 소비자 ABS
+- **자금조달 수요 증가 응답** — 투자등급/하이일드 회사채, 주식, CMBS, Agency/Non-agency RMBS, 소비자 ABS
+
+값은 모두 **순비율(net percentage)** 입니다 — "늘었다(좋아졌다)"고 답한 딜러 비율에서 "줄었다(나빠졌다)"고 답한 비율을 뺀 값이라, 수준이 아니라 방향을 나타냅니다.
+
+- 연준은 이 설문을 [federalreserve.gov/data/scoos.htm](https://www.federalreserve.gov/data/scoos.htm)에 HTML/PDF exhibit으로 공개하는데, **같은 exhibit 차트의 순비율 시리즈가 FRED 릴리스 571에 `EXHE<exhibit>C<chart>Q<question>NP` 형태로 그대로 올라와 있습니다.** 그래서 문항별 응답자 수(`SFQ*NR`)로 순비율을 직접 재계산하지 않고 이 시리즈를 그대로 가져옵니다 — 연준이 인쇄한 숫자와 동일합니다.
+- 패널 구성은 FRED의 차트 번호(`C1`~`C6`)를 그대로 따릅니다. 연준 Exhibit 3의 원본 배치와 같습니다.
+- 한 패널당 시리즈는 최대 3개입니다. 색각 이상에서도 구분되는 범주형 색상이 3개까지만 검증되기 때문이고, 색 외에 선 모양(실선·긴 점선·짧은 점선)으로도 구분합니다.
+- 차트를 누르거나 마우스를 올리면 해당 분기의 각 시리즈 값이 표시됩니다. 데이터는 2011년 4분기부터 전 구간을 담고 있습니다.
 
 ## 테스트
 

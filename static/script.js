@@ -301,21 +301,25 @@ function buildScoosPanel(title, series) {
   const panelEl = document.createElement("div");
   panelEl.className = "scoos-panel";
 
-  const legend = series
-    .map((s, i) => {
-      const style = ["solid", "dashed", "dotted"][i] || "solid";
-      return `
-        <span class="scoos-legend-item">
-          <span class="scoos-legend-line" style="border-top-color:${SCOOS_SERIES_COLORS[i]};border-top-style:${style}"></span>
-          ${escapeHtml(s.name)}
-        </span>
-      `;
-    })
-    .join("");
+  // A lone series is already named by the panel title, so a legend
+  // repeating it would just be noise.
+  const legend = series.length < 2
+    ? ""
+    : `<div class="scoos-legend">${series
+        .map((s, i) => {
+          const style = ["solid", "dashed", "dotted"][i] || "solid";
+          return `
+            <span class="scoos-legend-item">
+              <span class="scoos-legend-line" style="border-top-color:${SCOOS_SERIES_COLORS[i]};border-top-style:${style}"></span>
+              ${escapeHtml(s.name)}
+            </span>
+          `;
+        })
+        .join("")}</div>`;
 
   panelEl.innerHTML = `
     <div class="scoos-panel-title">${escapeHtml(title)}</div>
-    <div class="scoos-legend">${legend}</div>
+    ${legend}
     <canvas class="scoos-chart"></canvas>
   `;
 
@@ -512,8 +516,12 @@ function drawScoosTooltip(ctx, { width, height, toX, toY, dates, lines, highligh
   boxWidth += padding * 2;
   const boxHeight = padding * 2 + lineHeight * (rows.length + 1);
 
-  // Flip to the left of the crosshair when it would overflow the canvas.
-  const boxX = Math.min(Math.max(x + 10, 2), width - boxWidth - 2);
+  // Sit to the right of the crosshair, but flip to its left rather than
+  // clamp when that would run off the canvas -- clamping would park the box
+  // right on top of the most recent quarters, which is what you're usually
+  // pointing at.
+  const flip = x + 10 + boxWidth > width - 2;
+  const boxX = Math.max(flip ? x - 10 - boxWidth : x + 10, 2);
   const boxY = Math.min(SCOOS_PAD.top + 4, height - boxHeight - 2);
 
   ctx.fillStyle = "rgba(40, 40, 42, 0.92)";

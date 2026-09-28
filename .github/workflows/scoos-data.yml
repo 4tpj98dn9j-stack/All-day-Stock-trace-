@@ -7,10 +7,6 @@ on:
     # week of it landing without hammering FRED for data that rarely moves.
     - cron: "30 22 * * 1"
   workflow_dispatch: {}
-  # TEMPORARY: seeds data/scoos.json on the feature branch before merge.
-  push:
-    branches:
-      - claude/yahoo-finance-stock-data-f0ff7y
 
 permissions:
   contents: write
