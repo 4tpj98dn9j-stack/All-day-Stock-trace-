@@ -10,14 +10,13 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Inspect FRED SCOOS release series
+      - name: List SCOOS net-percentage exhibit series
         env:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
         run: |
           python - <<'PY'
           import json
           import os
-          import re
           import urllib.parse
           import urllib.request
 
@@ -41,35 +40,14 @@ jobs:
                   break
               offset += 1000
 
-          by_id = {r["id"]: r for r in rows}
+          np_rows = sorted((r for r in rows if r["id"].endswith("NP")), key=lambda r: r["id"])
+          print("NET PERCENTAGE SERIES:", len(np_rows))
+          for r in np_rows:
+              print(f"{r['id']}\t{r['frequency_short']}\t{r['observation_start']}..{r['observation_end']}\t{r['title']}")
 
-          print("### SERIES WHOSE ID ENDS IN 'NP'")
-          for r in rows:
-              if r["id"].endswith("NP"):
-                  print(f"{r['id']}\t{r['units_short']}\t{r['title'][:200]}")
           print()
-
-          print("### QUESTIONS MENTIONING EQUITIES + (DEMAND|LIQUIDITY)")
-          seen = set()
-          for r in rows:
-              t = r["title"].lower()
-              if "equit" in t and ("demand" in t or "liquidity" in t):
-                  m = re.match(r"^(\d+)\)", r["title"])
-                  q = m.group(1) if m else "?"
-                  if q not in seen:
-                      seen.add(q)
-                      print(f"  Q{q}: {r['title'][:200]}")
-          print()
-
-          for q in [54, 55, 58, 59, 64, 65, 68, 69, 72, 73, 76, 77]:
-              print(f"### Q{q} SERIES")
-              for r in rows:
-                  if r["title"].startswith(f"{q})"):
-                      answer = r["title"].split("Answer Type:")[-1].strip()
-                      print(f"  {r['id']}\t{r['observation_start']}..{r['observation_end']}\t{answer}")
-              print()
-
-          print("### SAMPLE OBSERVATIONS for SFQ77PNNR")
-          obs = fred("series/observations", series_id="SFQ77PNNR", sort_order="desc", limit=6)
-          print(json.dumps(obs["observations"], indent=1))
+          obs = fred("series/observations", series_id="EXHE3C5Q59NP", sort_order="desc", limit=10)
+          print("EXHE3C5Q59NP latest:", [(o["date"], o["value"]) for o in obs["observations"]])
+          obs = fred("series/observations", series_id="EXHE3C5Q59NP", sort_order="asc", limit=4)
+          print("EXHE3C5Q59NP earliest:", [(o["date"], o["value"]) for o in obs["observations"]])
           PY
