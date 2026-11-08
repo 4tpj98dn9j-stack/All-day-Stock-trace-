@@ -230,16 +230,16 @@ async function loadMacroData() {
   }
 }
 
-// Categorical palette for the SCOOS panels, capped at three series because
-// that's the widest set that stays distinguishable under colour-vision
-// deficiency. Each slot also gets its own dash pattern, so identity never
-// rests on hue alone.
-const SCOOS_SERIES_COLORS = ["#2a78d6", "#eb6834", "#1baf7a"];
-const SCOOS_SERIES_DASHES = [[], [6, 4], [2, 3]];
+// Categorical palette for the multi-series panels (SCOOS, credit curve),
+// capped at three series because that's the widest set that stays
+// distinguishable under colour-vision deficiency. Each slot also gets its
+// own dash pattern, so identity never rests on hue alone.
+const PANEL_SERIES_COLORS = ["#2a78d6", "#eb6834", "#1baf7a"];
+const PANEL_SERIES_DASHES = [[], [6, 4], [2, 3]];
 
-// Every rendered SCOOS panel, kept so a resize (or a hover leaving the
+// Every rendered panel chart, kept so a resize (or a hover leaving the
 // canvas) can redraw them without refetching.
-const scoosPanels = [];
+const panelCharts = [];
 
 function formatNetPercent(value) {
   return `${value > 0 ? "+" : ""}${value.toFixed(1)}`;
@@ -254,8 +254,6 @@ async function loadScoosData() {
   const groupsEl = document.getElementById("scoos-groups");
   const quarterEl = document.getElementById("scoos-quarter");
   const sourceEl = document.getElementById("scoos-source");
-
-  scoosPanels.length = 0;
 
   try {
     const res = await fetch("/api/scoos-data");
@@ -273,7 +271,7 @@ async function loadScoosData() {
       groupEl.className = "scoos-group";
       groupEl.innerHTML = `
         <h3 class="scoos-group-title">${escapeHtml(group.title)}</h3>
-        <p class="scoos-group-desc">${escapeHtml(group.description || "")}</p>
+        <p class="chart-group-desc">${escapeHtml(group.description || "")}</p>
       `;
 
       (group.panels || []).forEach((panel) => {
@@ -289,7 +287,7 @@ async function loadScoosData() {
       groupsEl.appendChild(groupEl);
     });
 
-    redrawScoosPanels();
+    redrawPanelCharts();
   } catch (err) {
     groupsEl.innerHTML = `<div class="error">SCOOS 데이터를 불러오지 못했습니다.</div>`;
     quarterEl.textContent = "";
@@ -298,33 +296,6 @@ async function loadScoosData() {
 }
 
 function buildScoosPanel(title, series) {
-  const panelEl = document.createElement("div");
-  panelEl.className = "scoos-panel";
-
-  // A lone series is already named by the panel title, so a legend
-  // repeating it would just be noise.
-  const legend = series.length < 2
-    ? ""
-    : `<div class="scoos-legend">${series
-        .map((s, i) => {
-          const style = ["solid", "dashed", "dotted"][i] || "solid";
-          return `
-            <span class="scoos-legend-item">
-              <span class="scoos-legend-line" style="border-top-color:${SCOOS_SERIES_COLORS[i]};border-top-style:${style}"></span>
-              ${escapeHtml(s.name)}
-            </span>
-          `;
-        })
-        .join("")}</div>`;
-
-  panelEl.innerHTML = `
-    <div class="scoos-panel-title">${escapeHtml(title)}</div>
-    ${legend}
-    <canvas class="scoos-chart"></canvas>
-  `;
-
-  const canvas = panelEl.querySelector(".scoos-chart");
-
   // All the panel's series share the survey calendar, but build the date
   // axis as a union anyway so a series that starts late (or skips a
   // quarter) lines up instead of shifting the whole line sideways.
@@ -334,13 +305,63 @@ function buildScoosPanel(title, series) {
     return { name: s.name, values: dates.map((d) => (byDate.has(d) ? byDate.get(d) : null)) };
   });
 
-  const state = { canvas, dates, lines, highlight: null };
-  scoosPanels.push(state);
+  return buildChartPanel(title, lines, {
+    xTicks: scoosYearTicks(dates),
+    pointLabel: (i) => quarterLabel(dates[i]),
+    formatValue: formatNetPercent,
+  });
+}
+
+/* Build one multi-series panel: title, legend, canvas and pointer handling.
+ *
+ * `lines` is [{name, values}] where every `values` array is the same length
+ * -- one entry per x position, null for a gap. `options` supplies what the
+ * x axis means: `xTicks` as [{index, label}], `pointLabel(i)` for the
+ * tooltip heading, and `formatValue(v)` for the numbers in it.
+ */
+function buildChartPanel(title, lines, { xTicks, pointLabel, formatValue }) {
+  const panelEl = document.createElement("div");
+  panelEl.className = "chart-panel";
+
+  // A lone series is already named by the panel title, so a legend
+  // repeating it would just be noise.
+  const legend = lines.length < 2
+    ? ""
+    : `<div class="chart-legend">${lines
+        .map((line, i) => {
+          const style = ["solid", "dashed", "dotted"][i] || "solid";
+          return `
+            <span class="chart-legend-item">
+              <span class="chart-legend-line" style="border-top-color:${PANEL_SERIES_COLORS[i]};border-top-style:${style}"></span>
+              ${escapeHtml(line.name)}
+            </span>
+          `;
+        })
+        .join("")}</div>`;
+
+  panelEl.innerHTML = `
+    <div class="chart-panel-title">${escapeHtml(title)}</div>
+    ${legend}
+    <canvas class="panel-chart"></canvas>
+  `;
+
+  const canvas = panelEl.querySelector(".panel-chart");
+
+  const state = {
+    canvas,
+    lines,
+    xTicks,
+    pointLabel,
+    formatValue,
+    pointCount: lines[0] ? lines[0].values.length : 0,
+    highlight: null,
+  };
+  panelCharts.push(state);
 
   const pick = (event) => {
     const rect = canvas.getBoundingClientRect();
-    state.highlight = nearestScoosIndex(state, event.clientX - rect.left, rect.width);
-    drawScoosChart(state);
+    state.highlight = nearestPanelIndex(state, event.clientX - rect.left, rect.width);
+    drawPanelChart(state);
   };
   canvas.addEventListener("pointerdown", pick);
   canvas.addEventListener("pointermove", (event) => {
@@ -351,19 +372,19 @@ function buildScoosPanel(title, series) {
   });
   canvas.addEventListener("pointerleave", () => {
     state.highlight = null;
-    drawScoosChart(state);
+    drawPanelChart(state);
   });
 
   return panelEl;
 }
 
-const SCOOS_PAD = { left: 30, right: 8, top: 8, bottom: 18 };
+const PANEL_PAD = { left: 30, right: 8, top: 8, bottom: 18 };
 
-function nearestScoosIndex(state, x, width) {
-  const plotWidth = Math.max(width - SCOOS_PAD.left - SCOOS_PAD.right, 1);
-  const stepX = plotWidth / Math.max(state.dates.length - 1, 1);
-  const index = Math.round((x - SCOOS_PAD.left) / stepX);
-  return Math.min(Math.max(index, 0), state.dates.length - 1);
+function nearestPanelIndex(state, x, width) {
+  const plotWidth = Math.max(width - PANEL_PAD.left - PANEL_PAD.right, 1);
+  const stepX = plotWidth / Math.max(state.pointCount - 1, 1);
+  const index = Math.round((x - PANEL_PAD.left) / stepX);
+  return Math.min(Math.max(index, 0), state.pointCount - 1);
 }
 
 function niceAxisScale(min, max, targetTicks = 4) {
@@ -385,8 +406,8 @@ function scoosYearTicks(dates) {
   return chosen.map(({ date, index }) => ({ index, label: date.slice(0, 4) }));
 }
 
-function drawScoosChart(state) {
-  const { canvas, dates, lines, highlight } = state;
+function drawPanelChart(state) {
+  const { canvas, lines, xTicks, pointCount, highlight } = state;
   const ctx = canvas.getContext("2d");
   const dpr = window.devicePixelRatio || 1;
   const width = canvas.clientWidth || 300;
@@ -403,16 +424,17 @@ function drawScoosChart(state) {
     return;
   }
 
-  // Always include zero -- these are net percentages, and the sign is the
-  // whole point, so a scale that floats off the zero line would mislead.
+  // Always include zero: these panels plot spreads and net percentages,
+  // where the distance from zero is the whole point, so a scale that
+  // floated off the zero line would exaggerate every wiggle.
   const { lo, hi, step } = niceAxisScale(Math.min(0, ...allValues), Math.max(0, ...allValues));
   const valueRange = hi - lo || 1;
 
-  const plotWidth = Math.max(width - SCOOS_PAD.left - SCOOS_PAD.right, 1);
-  const plotHeight = Math.max(height - SCOOS_PAD.top - SCOOS_PAD.bottom, 1);
-  const stepX = plotWidth / Math.max(dates.length - 1, 1);
-  const toX = (i) => SCOOS_PAD.left + i * stepX;
-  const toY = (v) => SCOOS_PAD.top + plotHeight - ((v - lo) / valueRange) * plotHeight;
+  const plotWidth = Math.max(width - PANEL_PAD.left - PANEL_PAD.right, 1);
+  const plotHeight = Math.max(height - PANEL_PAD.top - PANEL_PAD.bottom, 1);
+  const stepX = plotWidth / Math.max(pointCount - 1, 1);
+  const toX = (i) => PANEL_PAD.left + i * stepX;
+  const toY = (v) => PANEL_PAD.top + plotHeight - ((v - lo) / valueRange) * plotHeight;
 
   ctx.font = "10px -apple-system, sans-serif";
   ctx.textAlign = "right";
@@ -420,21 +442,21 @@ function drawScoosChart(state) {
   for (let v = lo; v <= hi + step / 2; v += step) {
     const y = toY(v);
     ctx.beginPath();
-    ctx.moveTo(SCOOS_PAD.left, y);
-    ctx.lineTo(width - SCOOS_PAD.right, y);
+    ctx.moveTo(PANEL_PAD.left, y);
+    ctx.lineTo(width - PANEL_PAD.right, y);
     ctx.strokeStyle = Math.abs(v) < step / 2 ? "#c7c7cc" : "#ececee";
     ctx.lineWidth = 1;
     ctx.setLineDash([]);
     ctx.stroke();
     ctx.fillStyle = "#999";
-    ctx.fillText(String(Math.round(v)), SCOOS_PAD.left - 5, y);
+    ctx.fillText(String(Math.round(v)), PANEL_PAD.left - 5, y);
   }
 
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
   ctx.fillStyle = "#999";
-  scoosYearTicks(dates).forEach((tick) => {
-    ctx.fillText(tick.label, toX(tick.index), height - SCOOS_PAD.bottom + 4);
+  xTicks.forEach((tick) => {
+    ctx.fillText(tick.label, toX(tick.index), height - PANEL_PAD.bottom + 4);
   });
 
   lines.forEach((line, i) => {
@@ -454,8 +476,8 @@ function drawScoosChart(state) {
         drawing = true;
       }
     });
-    ctx.strokeStyle = SCOOS_SERIES_COLORS[i % SCOOS_SERIES_COLORS.length];
-    ctx.setLineDash(SCOOS_SERIES_DASHES[i % SCOOS_SERIES_DASHES.length]);
+    ctx.strokeStyle = PANEL_SERIES_COLORS[i % PANEL_SERIES_COLORS.length];
+    ctx.setLineDash(PANEL_SERIES_DASHES[i % PANEL_SERIES_DASHES.length]);
     ctx.lineWidth = 2;
     ctx.lineJoin = "round";
     ctx.stroke();
@@ -463,16 +485,17 @@ function drawScoosChart(state) {
   ctx.setLineDash([]);
 
   if (highlight != null) {
-    drawScoosTooltip(ctx, { width, height, toX, toY, dates, lines, highlight });
+    drawPanelTooltip(ctx, { width, height, toX, toY, state, highlight });
   }
 }
 
-function drawScoosTooltip(ctx, { width, height, toX, toY, dates, lines, highlight }) {
+function drawPanelTooltip(ctx, { width, height, toX, toY, state, highlight }) {
+  const { lines, pointLabel, formatValue } = state;
   const x = toX(highlight);
 
   ctx.beginPath();
-  ctx.moveTo(x, SCOOS_PAD.top);
-  ctx.lineTo(x, height - SCOOS_PAD.bottom);
+  ctx.moveTo(x, PANEL_PAD.top);
+  ctx.lineTo(x, height - PANEL_PAD.bottom);
   ctx.strokeStyle = "#c7c7cc";
   ctx.lineWidth = 1;
   ctx.stroke();
@@ -483,8 +506,8 @@ function drawScoosTooltip(ctx, { width, height, toX, toY, dates, lines, highligh
     if (value == null) {
       return;
     }
-    const color = SCOOS_SERIES_COLORS[i % SCOOS_SERIES_COLORS.length];
-    rows.push({ color, text: `${line.name}: ${formatNetPercent(value)}` });
+    const color = PANEL_SERIES_COLORS[i % PANEL_SERIES_COLORS.length];
+    rows.push({ color, text: `${line.name}: ${formatValue(value)}` });
 
     // 2px surface ring so a marker stays readable where two lines cross.
     const y = toY(value);
@@ -502,7 +525,7 @@ function drawScoosTooltip(ctx, { width, height, toX, toY, dates, lines, highligh
     return;
   }
 
-  const title = quarterLabel(dates[highlight]);
+  const title = pointLabel(highlight);
   const padding = 7;
   const swatch = 9;
   const lineHeight = 15;
@@ -522,7 +545,7 @@ function drawScoosTooltip(ctx, { width, height, toX, toY, dates, lines, highligh
   // pointing at.
   const flip = x + 10 + boxWidth > width - 2;
   const boxX = Math.max(flip ? x - 10 - boxWidth : x + 10, 2);
-  const boxY = Math.min(SCOOS_PAD.top + 4, height - boxHeight - 2);
+  const boxY = Math.min(PANEL_PAD.top + 4, height - boxHeight - 2);
 
   ctx.fillStyle = "rgba(40, 40, 42, 0.92)";
   ctx.beginPath();
@@ -545,8 +568,47 @@ function drawScoosTooltip(ctx, { width, height, toX, toY, dates, lines, highligh
   });
 }
 
-function redrawScoosPanels() {
-  scoosPanels.forEach(drawScoosChart);
+function redrawPanelCharts() {
+  panelCharts.forEach(drawPanelChart);
+}
+
+async function loadCreditCurve() {
+  const panelsEl = document.getElementById("credit-curve-panels");
+  const sourceEl = document.getElementById("credit-curve-source");
+
+  try {
+    const res = await fetch("/api/credit-curve");
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+    const data = await res.json();
+
+    const buckets = data.buckets || [];
+    const snapshots = (data.snapshots || []).filter((s) => s.values.some((v) => v != null));
+    if (!buckets.length || !snapshots.length) {
+      throw new Error("no curve");
+    }
+
+    sourceEl.textContent = `출처: ${data.source || "ICE BofA (FRED)"} · ${data.unit || "bp"}, ${data.latest_date || ""} 기준`;
+
+    const lines = snapshots.map((snapshot) => ({ name: snapshot.name, values: snapshot.values }));
+
+    panelsEl.innerHTML = "";
+    panelsEl.appendChild(
+      buildChartPanel("만기별 스프레드 (투자등급 전체)", lines, {
+        // One tick per maturity bucket -- the x axis is the bucket itself,
+        // not a date, so every position gets a label.
+        xTicks: buckets.map((label, index) => ({ index, label })),
+        pointLabel: (i) => buckets[i],
+        formatValue: (v) => `${Math.round(v)}bp`,
+      }),
+    );
+
+    redrawPanelCharts();
+  } catch (err) {
+    panelsEl.innerHTML = `<div class="error">회사채 스프레드 커브를 불러오지 못했습니다.</div>`;
+    sourceEl.textContent = "";
+  }
 }
 
 async function loadMarketSummary() {
@@ -640,10 +702,17 @@ async function refreshAll() {
   btn.disabled = true;
   btn.textContent = "불러오는 중...";
 
+  // Both panel sections rebuild their canvases from scratch, so drop the
+  // old chart states here rather than in either loader -- they run
+  // concurrently, and one clearing the shared list would discard the
+  // other's freshly registered panels.
+  panelCharts.length = 0;
+
   try {
     await Promise.all([
       loadMarketSummary(),
       loadMacroData(),
+      loadCreditCurve(),
       loadScoosData(),
       loadQuotes(),
       loadDailyReport(),
@@ -1052,10 +1121,10 @@ document.addEventListener("keydown", (e) => {
 
 // The SCOOS charts are laid out inline (not in a modal), so they have to
 // re-render at the new width when the window or phone orientation changes.
-let scoosResizeTimer = null;
+let panelResizeTimer = null;
 window.addEventListener("resize", () => {
-  clearTimeout(scoosResizeTimer);
-  scoosResizeTimer = setTimeout(redrawScoosPanels, 150);
+  clearTimeout(panelResizeTimer);
+  panelResizeTimer = setTimeout(redrawPanelCharts, 150);
 });
 
 window.addEventListener("DOMContentLoaded", refreshAll);
