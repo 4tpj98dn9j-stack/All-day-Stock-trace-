@@ -5,10 +5,6 @@ on:
     # 22:00 UTC, daily -- shortly after the daily report runs.
     - cron: "0 22 * * *"
   workflow_dispatch: {}
-  # TEMPORARY: seeds data/credit_curve.json on the feature branch before merge.
-  push:
-    branches:
-      - claude/yahoo-finance-stock-data-f0ff7y
 
 permissions:
   contents: write

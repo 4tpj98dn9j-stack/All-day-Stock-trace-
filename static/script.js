@@ -456,7 +456,12 @@ function drawPanelChart(state) {
   ctx.textBaseline = "top";
   ctx.fillStyle = "#999";
   xTicks.forEach((tick) => {
-    ctx.fillText(tick.label, toX(tick.index), height - PANEL_PAD.bottom + 4);
+    // Nudge the end labels inward instead of letting them run off the
+    // canvas -- a bucket label like "15년+" sits right on the last point,
+    // so centring it would clip half of it.
+    const half = ctx.measureText(tick.label).width / 2;
+    const x = Math.min(Math.max(toX(tick.index), half + 1), width - half - 1);
+    ctx.fillText(tick.label, x, height - PANEL_PAD.bottom + 4);
   });
 
   lines.forEach((line, i) => {
