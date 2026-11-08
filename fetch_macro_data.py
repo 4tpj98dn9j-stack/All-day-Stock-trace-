@@ -82,6 +82,14 @@ MACRO_SERIES = [
     # 신용 / 리스크
     {"id": "BAMLH0A0HYM2", "name": "하이일드 스프레드", "prefix": "", "unit": "%", "history_count": DAILY_HISTORY},
     {"id": "BAA10Y", "name": "회사채-국채 스프레드(Baa)", "prefix": "", "unit": "%", "history_count": DAILY_HISTORY},
+    # Investment-grade spreads by rating tier. BAA10Y above is a different
+    # measure (Moody's Baa *yield* minus the 10yr Treasury yield); these are
+    # ICE BofA option-adjusted spreads for the whole index at each rating,
+    # which is what "AAA-AA vs BBB" comparisons are normally quoted off.
+    {"id": "BAMLC0A1CAAA", "name": "AAA 회사채 스프레드", "prefix": "", "unit": "%", "history_count": DAILY_HISTORY},
+    {"id": "BAMLC0A2CAA", "name": "AA 회사채 스프레드", "prefix": "", "unit": "%", "history_count": DAILY_HISTORY},
+    {"id": "BAMLC0A3CA", "name": "A 회사채 스프레드", "prefix": "", "unit": "%", "history_count": DAILY_HISTORY},
+    {"id": "BAMLC0A4CBBB", "name": "BBB 회사채 스프레드", "prefix": "", "unit": "%", "history_count": DAILY_HISTORY},
     {"id": "NFCI", "name": "시카고연은 금융여건지수", "prefix": "", "unit": "", "history_count": WEEKLY_HISTORY},
     {"id": "STLFSI4", "name": "세인트루이스연은 금융스트레스지수", "prefix": "", "unit": "", "history_count": WEEKLY_HISTORY},
     # Quality dispersion inside high yield: CCC spreads minus BB spreads.

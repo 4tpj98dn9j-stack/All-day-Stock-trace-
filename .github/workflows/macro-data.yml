@@ -28,11 +28,16 @@ jobs:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
         run: python fetch_macro_data.py
 
+      - name: Fetch credit spread curve
+        env:
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+        run: python fetch_credit_curve.py
+
       - name: Commit and push macro data
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/macro.json
+          git add data/macro.json data/credit_curve.json
           if git diff --cached --quiet; then
             echo "No changes to commit"
           else
