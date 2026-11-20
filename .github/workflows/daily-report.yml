@@ -2,10 +2,10 @@ name: Daily Report
 
 on:
   schedule:
-    # 21:30 UTC = after 4pm US market close on the NASDAQ, weekdays only.
-    # Fixed UTC time; ~30-60min of slack around the EST/EDT boundary either
-    # way is fine since this just needs to run after the close settles.
-    - cron: "30 21 * * 1-5"
+    # 23:00 UTC, weekdays. The US close is 21:00/22:00 UTC depending on DST;
+    # waiting a couple of hours past it gives Yahoo time to settle the day's
+    # final bars, which it doesn't always have done right after the bell.
+    - cron: "0 23 * * 1-5"
   workflow_dispatch: {}
 
 permissions:

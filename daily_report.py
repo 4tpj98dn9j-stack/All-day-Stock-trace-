@@ -12,10 +12,17 @@ access to Yahoo Finance, unlike this project's other dev/CI sandboxes).
 from datetime import datetime, timezone
 from pathlib import Path
 
+import yfinance as yf
+
 from app import INDICES, TICKERS, build_market_summary, fetch_stats
 from daily_change_tracker import get_change
 
 OUTPUT_DIR = Path("daily")
+
+# The index whose last trading day defines "current" for the whole report.
+# Every holding is checked against it: a ticker whose newest daily bar is
+# older than this one is behind the market, not simply untraded.
+REFERENCE_SYMBOL = "^GSPC"
 
 # Personal 3-year price targets, independent of analyst consensus.
 PERSONAL_TARGETS = {
@@ -43,19 +50,44 @@ def format_target_price(close, stats):
     return format_price_target(close, target)
 
 
+def fetch_fast_quote(ticker):
+    """Return (last_price, previous_close) from Yahoo's lightweight quote.
+
+    Yahoo's daily-bar history and its quote endpoint don't always move in
+    step -- the history can still be a day behind while the quote is
+    current. So when a holding's newest bar is older than the reference
+    index's, this is the second chance before the row is called stale.
+
+    Returns None if the quote is missing, zero, or the call fails.
+    """
+    try:
+        fast_info = yf.Ticker(ticker).fast_info
+        last_price = fast_info["last_price"]
+        prev_close = fast_info["previous_close"]
+    except Exception:
+        return None
+
+    if not last_price or not prev_close:
+        return None
+    return float(last_price), float(prev_close)
+
+
 def build_report(today):
     lines = [f"# {today} 마감 리포트", ""]
 
     lines.append("## 미국 주식시장 시황")
     lines.append("")
     pct_by_symbol = {}
+    reference_date = None
     for meta in INDICES:
         result = get_change(meta["symbol"])
         if result is None:
             lines.append(f"- {meta['name']}: 데이터 없음")
             pct_by_symbol[meta["symbol"]] = None
             continue
-        _, _, _, _, close, prev_close, pct_change = result
+        latest_date, _, _, _, close, prev_close, pct_change = result
+        if meta["symbol"] == REFERENCE_SYMBOL:
+            reference_date = latest_date
         sign = "+" if pct_change >= 0 else ""
         lines.append(f"- {meta['name']}: {close:,.2f} ({sign}{pct_change:.2f}%)")
         pct_by_symbol[meta["symbol"]] = pct_change
@@ -73,21 +105,36 @@ def build_report(today):
 
     lines.append("## 보유 종목 시세")
     lines.append("")
-    lines.append("| 종목 | 종가 | 전일 대비 | 등락률 | 목표주가(컨센서스) | 개인 목표가(3년) |")
-    lines.append("| --- | --- | --- | --- | --- | --- |")
+    lines.append("| 종목 | 데이터 날짜 | 종가 | 전일 대비 | 등락률 | 목표주가(컨센서스) | 개인 목표가(3년) |")
+    lines.append("| --- | --- | --- | --- | --- | --- | --- |")
     for ticker in TICKERS:
         result = get_change(ticker)
         if result is None:
-            lines.append(f"| {ticker} | - | - | - | - | - |")
+            lines.append(f"| {ticker} | - | - | - | - | - | - |")
             continue
-        _, _, _, _, close, prev_close, pct_change = result
+        latest_date, _, _, _, close, prev_close, pct_change = result
+
+        date_text = latest_date
+        if reference_date and latest_date < reference_date:
+            quote = fetch_fast_quote(ticker)
+            if quote:
+                close, prev_close = quote
+                pct_change = (close - prev_close) / prev_close * 100
+                # Flagged because this is a live quote standing in for the
+                # session's settled bar, not the bar itself.
+                date_text = f"{reference_date} (실시간)"
+            else:
+                # Keep the stale numbers -- they're the best available --
+                # but say how far behind they are.
+                date_text = f"⚠️ stale ({latest_date})"
+
         change = close - prev_close
         change_sign = "+" if change >= 0 else "-"
         pct_sign = "+" if pct_change >= 0 else ""
         target_text = format_target_price(close, fetch_stats(ticker))
         personal_text = format_price_target(close, PERSONAL_TARGETS.get(ticker))
         lines.append(
-            f"| {ticker} | ${close:,.2f} | {change_sign}${abs(change):,.2f} | "
+            f"| {ticker} | {date_text} | ${close:,.2f} | {change_sign}${abs(change):,.2f} | "
             f"{pct_sign}{pct_change:.2f}% | {target_text} | {personal_text} |"
         )
     return "\n".join(lines).rstrip() + "\n"
