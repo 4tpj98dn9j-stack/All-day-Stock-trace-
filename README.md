@@ -52,7 +52,13 @@ pip install -r requirements.txt
 
 ## 매일 마감 리포트 자동화
 
-`.github/workflows/daily-report.yml`이 평일 21:30 UTC(미국 나스닥 마감 이후)에 `daily_report.py`를 실행해서 `daily/<날짜>.md`를 자동으로 커밋·푸시합니다. GitHub Actions 러너는 이 저장소의 로컬 개발/CI 환경과 달리 Yahoo Finance에 정상적으로 접속되므로, 이 자동화는 실제 데이터를 안정적으로 가져올 수 있습니다.
+`.github/workflows/daily-report.yml`이 평일 23:00 UTC(미국 장 마감 후 1~2시간)에 `daily_report.py`를 실행해서 `daily/<날짜>.md`를 자동으로 커밋·푸시합니다. GitHub Actions 러너는 이 저장소의 로컬 개발/CI 환경과 달리 Yahoo Finance에 정상적으로 접속되므로, 이 자동화는 실제 데이터를 안정적으로 가져올 수 있습니다.
+
+보유 종목 표에는 **데이터 날짜** 열이 있습니다. 각 종목의 최신 일봉 날짜를 S&P500(`^GSPC`)의 최신 일봉 날짜와 비교해서:
+
+- 같으면 그 날짜를 그대로 표시합니다.
+- 종목 쪽이 더 과거면(= 시장보다 뒤처진 데이터) `yf.Ticker(...).fast_info`의 `last_price`/`previous_close`로 값을 교체하고 `2026-11-20 (실시간)`처럼 표시합니다. 일봉이 아니라 실시간 호가에서 온 값이라 구분해서 표기합니다.
+- 그 호출마저 실패하면 원래의 오래된 값을 그대로 두되 `⚠️ stale (2026-11-18)`로 표시해서 며칠 뒤처졌는지 보이게 합니다.
 
 - 수동 실행: 저장소 **Actions** 탭 → **Daily Report** → **Run workflow**
 - 스케줄 변경: `.github/workflows/daily-report.yml`의 `cron` 값 수정
