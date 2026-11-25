@@ -1,0 +1,106 @@
+{
+  "updated_at": "2026-11-25T04:01:08Z",
+  "reference_symbol": "^GSPC",
+  "reference_date": "2026-11-24",
+  "indices": {
+    "^GSPC": {
+      "name": "S&P500",
+      "date": "2026-11-24",
+      "close": 7201.0898,
+      "prev_close": 7237.1699,
+      "pct_change": -0.4985
+    },
+    "^DJI": {
+      "name": "다우지수",
+      "date": "2026-11-24",
+      "close": 50018.6992,
+      "prev_close": 49595.3086,
+      "pct_change": 0.8537
+    },
+    "^IXIC": {
+      "name": "나스닥종합지수",
+      "date": "2026-11-24",
+      "close": 23733.5352,
+      "prev_close": 24089.5605,
+      "pct_change": -1.4779
+    },
+    "^NDX": {
+      "name": "나스닥100",
+      "date": "2026-11-24",
+      "close": 26214.168,
+      "prev_close": 26746.0996,
+      "pct_change": -1.9888
+    },
+    "NQ=F": {
+      "name": "나스닥100 선물",
+      "date": "2026-11-24",
+      "close": 25995.75,
+      "prev_close": 26808.0,
+      "pct_change": -3.0299
+    },
+    "^RUT": {
+      "name": "러셀2000",
+      "date": "2026-11-24",
+      "close": 2684.9419,
+      "prev_close": 2669.6599,
+      "pct_change": 0.5724
+    },
+    "^VIX": {
+      "name": "VIX",
+      "date": "2026-11-24",
+      "close": 26.36,
+      "prev_close": 26.62,
+      "pct_change": -0.9767
+    }
+  },
+  "holdings": {
+    "NOW": {
+      "date": "2026-11-24",
+      "close": 91.74,
+      "prev_close": 91.72,
+      "pct_change": 0.0218,
+      "source": "history",
+      "stale": false
+    },
+    "TSLA": {
+      "date": "2026-11-24",
+      "close": 384.68,
+      "prev_close": 385.46,
+      "pct_change": -0.2024,
+      "source": "history",
+      "stale": false
+    },
+    "SPCX": {
+      "date": "2026-11-24",
+      "close": 125.81,
+      "prev_close": 133.35,
+      "pct_change": -5.6543,
+      "source": "history",
+      "stale": false
+    },
+    "INFQ": {
+      "date": "2026-11-24",
+      "close": 6.34,
+      "prev_close": 6.75,
+      "pct_change": -6.0741,
+      "source": "history",
+      "stale": false
+    },
+    "PL": {
+      "date": "2026-11-24",
+      "close": 10.64,
+      "prev_close": 11.21,
+      "pct_change": -5.0847,
+      "source": "history",
+      "stale": false
+    },
+    "QCOM": {
+      "date": "2026-11-24",
+      "close": 164.96,
+      "prev_close": 165.38,
+      "pct_change": -0.254,
+      "source": "history",
+      "stale": false
+    }
+  }
+}

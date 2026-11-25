@@ -55,14 +55,18 @@ class DailyReportTests(unittest.TestCase):
         self.assertIn("기술주가 대형 우량주 대비 약세", report)
         self.assertIn("VIX: 21.00 (+16.67%)", report)
         self.assertIn(
-            "| QCOM | $162.68 | +$1.18 | +0.73% | $178.95 (+10%) | $300.00 (+84%) |", report,
+            "| QCOM | 2026-08-15 | $162.68 | +$1.18 | +0.73% | $178.95 (+10%) | $300.00 (+84%) |",
+            report,
         )
         # regression check: negative change must render as "-$3.00", not "$-3.00"
         self.assertIn(
-            "| NOW | $902.00 | -$3.00 | -0.33% | $950.00 (+5%) | $180.00 (-80%) |", report,
+            "| NOW | 2026-08-15 | $902.00 | -$3.00 | -0.33% | $950.00 (+5%) | $180.00 (-80%) |",
+            report,
         )
         # ticker with no analyst target data falls back to "-"
-        self.assertIn("| TSLA | $302.00 | +$0.50 | +0.17% | - | $480.00 (+59%) |", report)
+        self.assertIn(
+            "| TSLA | 2026-08-15 | $302.00 | +$0.50 | +0.17% | - | $480.00 (+59%) |", report,
+        )
         # per-ticker news is intentionally omitted -- redundant with the
         # card-click modal on the dashboard
         self.assertNotIn("종목별 최근 뉴스", report)
@@ -73,7 +77,73 @@ class DailyReportTests(unittest.TestCase):
             report = daily_report.build_report("2026-08-15")
 
         self.assertIn("데이터 없음", report)
-        self.assertIn("| NOW | - | - | - | - | - |", report)
+        self.assertIn("| NOW | - | - | - | - | - | - |", report)
+
+
+class StaleDataTests(unittest.TestCase):
+    """A holding whose newest bar predates the S&P 500's is behind the
+    market, and must not be shown as if it were the day's close.
+    """
+
+    @staticmethod
+    def stale_get_change(symbol):
+        if symbol == "NOW":
+            # One session behind the rest of the table.
+            return ("2026-08-14", 900.0, 905.0, 895.0, 880.0, 884.0, -0.45)
+        return fake_get_change(symbol)
+
+    def build(self, fast_quote):
+        with patch("daily_report.get_change", side_effect=self.stale_get_change), \
+             patch("daily_report.fetch_stats", side_effect=fake_fetch_stats), \
+             patch("fetch_closes.fetch_fast_quote", return_value=fast_quote) as mock_quote:
+            report = daily_report.build_report("2026-08-15")
+        return report, mock_quote
+
+    def test_replaces_a_stale_row_with_the_live_quote(self):
+        report, mock_quote = self.build((910.0, 902.0))
+
+        mock_quote.assert_called_once_with("NOW")
+        # Priced off the live quote, dated to the reference session and
+        # flagged so it can't be mistaken for a settled bar.
+        self.assertIn(
+            "| NOW | 2026-08-15 (실시간) | $910.00 | +$8.00 | +0.89% | $950.00 (+4%) |",
+            report,
+        )
+        self.assertNotIn("⚠️ stale", report)
+
+    def test_falls_back_to_a_stale_marker_when_the_quote_fails(self):
+        report, _ = self.build(None)
+
+        # The old numbers stay -- they're the best available -- but the
+        # date column says how far behind they are.
+        self.assertIn("| NOW | ⚠️ stale (2026-08-14) | $880.00 |", report)
+
+    def test_leaves_up_to_date_rows_alone(self):
+        with patch("daily_report.get_change", side_effect=fake_get_change), \
+             patch("daily_report.fetch_stats", side_effect=fake_fetch_stats), \
+             patch("fetch_closes.fetch_fast_quote") as mock_quote:
+            report = daily_report.build_report("2026-08-15")
+
+        mock_quote.assert_not_called()
+        self.assertNotIn("⚠️ stale", report)
+        self.assertNotIn("실시간", report)
+
+    def test_skips_the_check_when_the_reference_index_is_missing(self):
+        def no_gspc(symbol):
+            return None if symbol == "^GSPC" else self.stale_get_change(symbol)
+
+        with patch("daily_report.get_change", side_effect=no_gspc), \
+             patch("daily_report.fetch_stats", side_effect=fake_fetch_stats), \
+             patch("fetch_closes.fetch_fast_quote") as mock_quote:
+            report = daily_report.build_report("2026-08-15")
+
+        # Without a reference date there's nothing to call stale against,
+        # so rows are reported at their own dates rather than guessed at.
+        mock_quote.assert_not_called()
+        self.assertIn("| NOW | 2026-08-14 | $880.00 |", report)
+
+
+class OutputAndFormattingTests(unittest.TestCase):
 
     def test_main_writes_dated_file(self):
         test_dir = Path("/tmp/daily_report_test_output")

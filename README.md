@@ -49,10 +49,40 @@ pip install -r requirements.txt
   export FRED_API_KEY=...
   python fetch_credit_curve.py
   ```
+- `fetch_closes.py` — 보유 6종목과 주요 지수의 최신 종가를 `data/closes.json`으로 저장 (API 키 불필요)
+  ```bash
+  python fetch_closes.py
+  ```
 
 ## 매일 마감 리포트 자동화
 
-`.github/workflows/daily-report.yml`이 평일 21:30 UTC(미국 나스닥 마감 이후)에 `daily_report.py`를 실행해서 `daily/<날짜>.md`를 자동으로 커밋·푸시합니다. GitHub Actions 러너는 이 저장소의 로컬 개발/CI 환경과 달리 Yahoo Finance에 정상적으로 접속되므로, 이 자동화는 실제 데이터를 안정적으로 가져올 수 있습니다.
+`.github/workflows/daily-report.yml`이 평일 23:00 UTC(미국 장 마감 후 1~2시간)에 `daily_report.py`를 실행해서 `daily/<날짜>.md`를 자동으로 커밋·푸시합니다. GitHub Actions 러너는 이 저장소의 로컬 개발/CI 환경과 달리 Yahoo Finance에 정상적으로 접속되므로, 이 자동화는 실제 데이터를 안정적으로 가져올 수 있습니다.
+
+보유 종목 표에는 **데이터 날짜** 열이 있습니다. 각 종목의 최신 일봉 날짜를 S&P500(`^GSPC`)의 최신 일봉 날짜와 비교해서:
+
+- 같으면 그 날짜를 그대로 표시합니다.
+- 종목 쪽이 더 과거면(= 시장보다 뒤처진 데이터) `yf.Ticker(...).fast_info`의 `last_price`/`previous_close`로 값을 교체하고 `2026-11-20 (실시간)`처럼 표시합니다. 일봉이 아니라 실시간 호가에서 온 값이라 구분해서 표기합니다.
+- 그 호출마저 실패하면 원래의 오래된 값을 그대로 두되 `⚠️ stale (2026-11-18)`로 표시해서 며칠 뒤처졌는지 보이게 합니다.
+
+## 종가 스냅샷 자동화
+
+`.github/workflows/closes-data.yml`이 평일 **21:15 UTC와 23:30 UTC 두 번** `fetch_closes.py`를 실행해서 `data/closes.json`을 커밋합니다. 보유 6종목과 "미국 주식시장 시황"의 주요 지수 7개(`app.py`의 `INDICES`) 각각의 종가·전일 종가·등락률·거래 날짜를 담습니다.
+
+```json
+{
+  "updated_at": "2026-11-25T21:16:03Z",
+  "reference_symbol": "^GSPC",
+  "reference_date": "2026-11-25",
+  "indices":  { "^GSPC": { "name": "S&P500", "date": "2026-11-25", "close": 7200.0, "prev_close": 7100.0, "pct_change": 1.4085 } },
+  "holdings": { "PL":    { "date": "2026-11-25", "close": 12.3, "prev_close": 12.0, "pct_change": 2.5, "source": "fast_info", "stale": false } }
+}
+```
+
+- **staleness 규칙은 보유 종목에만 적용합니다.** 종목의 거래 날짜가 `^GSPC`보다 이전이면 `fast_info`로 다시 받고(`"source": "fast_info"`, 날짜는 `^GSPC`의 날짜), 그래도 실패하면 기존 값을 두고 `"stale": true`로 표시합니다. 위 일일 리포트와 **같은 함수**(`fetch_closes.resolve_close`)를 쓰므로 두 곳의 판정이 어긋날 수 없습니다.
+- **두 번째 실행이 첫 번째 결과를 망치지 않습니다.** 종목별로 기존 파일 값과 이번 값을 비교해, 날짜가 더 새롭거나(같은 날짜면) stale이 아닌 쪽을 남깁니다. 두 번째 실행에서 Yahoo가 일시적으로 오래된 값을 주거나 아예 실패해도 첫 번째의 정상 종가가 유지됩니다.
+- 이번 실행에서 `^GSPC`를 못 받아도 기존 파일의 `^GSPC` 날짜를 기준으로 판정을 계속합니다. 이전 실행에서 넘어온 값도 기준일이 바뀌면 `stale`이 다시 계산됩니다.
+- 가격이 하나도 바뀌지 않았으면 파일을 다시 쓰지 않아 커밋도 생기지 않습니다. 그래서 `updated_at`은 "마지막으로 확인한 시각"이 아니라 "마지막으로 값이 바뀐 시각"입니다.
+- 수동 실행: **Actions** → **Closes Data** → **Run workflow**
 
 - 수동 실행: 저장소 **Actions** 탭 → **Daily Report** → **Run workflow**
 - 스케줄 변경: `.github/workflows/daily-report.yml`의 `cron` 값 수정
