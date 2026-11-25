@@ -1,0 +1,60 @@
+name: Closes Data
+
+on:
+  schedule:
+    # Two passes after the US close (21:00 UTC in winter, 20:00 in summer).
+    # The first catches the close quickly; the second, a couple of hours
+    # later, fills in any holding whose final bar Yahoo hadn't settled yet.
+    # fetch_closes.py keeps a good first-pass close if the second pass comes
+    # back worse, so running twice can only improve the snapshot.
+    - cron: "15 21 * * 1-5"
+    - cron: "30 23 * * 1-5"
+  workflow_dispatch: {}
+  # TEMPORARY: seeds data/closes.json on the feature branch before merge.
+  push:
+    branches:
+      - claude/yahoo-finance-stock-data-f0ff7y
+
+permissions:
+  contents: write
+
+# GitHub can start scheduled runs late under load; never let a delayed first
+# pass overlap the second, since both read and rewrite the same file.
+concurrency:
+  group: closes-data
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Fetch closes
+        run: python fetch_closes.py
+
+      - name: Commit and push closes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/closes.json
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "Update closes for $(date -u '+%Y-%m-%d %H:%M') UTC"
+          # Other data workflows push to the same branch around this time;
+          # they touch different files, so a rebase always applies cleanly.
+          for attempt in 1 2 3; do
+            git pull --rebase origin "${GITHUB_REF_NAME}" && git push && exit 0
+            sleep $((attempt * 5))
+          done
+          exit 1

@@ -1,7 +1,7 @@
 import shutil
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import daily_report
 
@@ -95,7 +95,7 @@ class StaleDataTests(unittest.TestCase):
     def build(self, fast_quote):
         with patch("daily_report.get_change", side_effect=self.stale_get_change), \
              patch("daily_report.fetch_stats", side_effect=fake_fetch_stats), \
-             patch("daily_report.fetch_fast_quote", return_value=fast_quote) as mock_quote:
+             patch("fetch_closes.fetch_fast_quote", return_value=fast_quote) as mock_quote:
             report = daily_report.build_report("2026-08-15")
         return report, mock_quote
 
@@ -121,7 +121,7 @@ class StaleDataTests(unittest.TestCase):
     def test_leaves_up_to_date_rows_alone(self):
         with patch("daily_report.get_change", side_effect=fake_get_change), \
              patch("daily_report.fetch_stats", side_effect=fake_fetch_stats), \
-             patch("daily_report.fetch_fast_quote") as mock_quote:
+             patch("fetch_closes.fetch_fast_quote") as mock_quote:
             report = daily_report.build_report("2026-08-15")
 
         mock_quote.assert_not_called()
@@ -134,37 +134,13 @@ class StaleDataTests(unittest.TestCase):
 
         with patch("daily_report.get_change", side_effect=no_gspc), \
              patch("daily_report.fetch_stats", side_effect=fake_fetch_stats), \
-             patch("daily_report.fetch_fast_quote") as mock_quote:
+             patch("fetch_closes.fetch_fast_quote") as mock_quote:
             report = daily_report.build_report("2026-08-15")
 
         # Without a reference date there's nothing to call stale against,
         # so rows are reported at their own dates rather than guessed at.
         mock_quote.assert_not_called()
         self.assertIn("| NOW | 2026-08-14 | $880.00 |", report)
-
-
-class FetchFastQuoteTests(unittest.TestCase):
-    def fast_info(self, payload):
-        ticker = MagicMock()
-        ticker.fast_info = payload
-        return patch("daily_report.yf.Ticker", return_value=ticker)
-
-    def test_returns_last_price_and_previous_close(self):
-        with self.fast_info({"last_price": 910.5, "previous_close": 902.0}):
-            self.assertEqual(daily_report.fetch_fast_quote("NOW"), (910.5, 902.0))
-
-    def test_returns_none_when_a_field_is_missing(self):
-        with self.fast_info({"last_price": 910.5}):
-            self.assertIsNone(daily_report.fetch_fast_quote("NOW"))
-
-    def test_returns_none_on_a_zero_price(self):
-        # A zero previous close would make the pct change blow up.
-        with self.fast_info({"last_price": 910.5, "previous_close": 0}):
-            self.assertIsNone(daily_report.fetch_fast_quote("NOW"))
-
-    def test_returns_none_when_the_call_fails(self):
-        with patch("daily_report.yf.Ticker", side_effect=RuntimeError("network error")):
-            self.assertIsNone(daily_report.fetch_fast_quote("NOW"))
 
 
 class OutputAndFormattingTests(unittest.TestCase):

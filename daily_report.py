@@ -12,17 +12,11 @@ access to Yahoo Finance, unlike this project's other dev/CI sandboxes).
 from datetime import datetime, timezone
 from pathlib import Path
 
-import yfinance as yf
-
 from app import INDICES, TICKERS, build_market_summary, fetch_stats
 from daily_change_tracker import get_change
+from fetch_closes import REFERENCE_SYMBOL, resolve_close
 
 OUTPUT_DIR = Path("daily")
-
-# The index whose last trading day defines "current" for the whole report.
-# Every holding is checked against it: a ticker whose newest daily bar is
-# older than this one is behind the market, not simply untraded.
-REFERENCE_SYMBOL = "^GSPC"
 
 # Personal 3-year price targets, independent of analyst consensus.
 PERSONAL_TARGETS = {
@@ -48,28 +42,6 @@ def format_target_price(close, stats):
     """Format analyst consensus target price with upside/downside vs. close, e.g. "$140.25 (+13%)"."""
     target = stats.get("target_mean_price") if stats else None
     return format_price_target(close, target)
-
-
-def fetch_fast_quote(ticker):
-    """Return (last_price, previous_close) from Yahoo's lightweight quote.
-
-    Yahoo's daily-bar history and its quote endpoint don't always move in
-    step -- the history can still be a day behind while the quote is
-    current. So when a holding's newest bar is older than the reference
-    index's, this is the second chance before the row is called stale.
-
-    Returns None if the quote is missing, zero, or the call fails.
-    """
-    try:
-        fast_info = yf.Ticker(ticker).fast_info
-        last_price = fast_info["last_price"]
-        prev_close = fast_info["previous_close"]
-    except Exception:
-        return None
-
-    if not last_price or not prev_close:
-        return None
-    return float(last_price), float(prev_close)
 
 
 def build_report(today):
@@ -112,21 +84,19 @@ def build_report(today):
         if result is None:
             lines.append(f"| {ticker} | - | - | - | - | - | - |")
             continue
-        latest_date, _, _, _, close, prev_close, pct_change = result
+        entry = resolve_close(ticker, result, reference_date)
+        close, prev_close, pct_change = entry["close"], entry["prev_close"], entry["pct_change"]
 
-        date_text = latest_date
-        if reference_date and latest_date < reference_date:
-            quote = fetch_fast_quote(ticker)
-            if quote:
-                close, prev_close = quote
-                pct_change = (close - prev_close) / prev_close * 100
-                # Flagged because this is a live quote standing in for the
-                # session's settled bar, not the bar itself.
-                date_text = f"{reference_date} (실시간)"
-            else:
-                # Keep the stale numbers -- they're the best available --
-                # but say how far behind they are.
-                date_text = f"⚠️ stale ({latest_date})"
+        if entry["source"] == "fast_info":
+            # Flagged because this is a live quote standing in for the
+            # session's settled bar, not the bar itself.
+            date_text = f"{entry['date']} (실시간)"
+        elif entry["stale"]:
+            # The old numbers stay -- they're the best available -- but the
+            # column says how far behind they are.
+            date_text = f"⚠️ stale ({entry['date']})"
+        else:
+            date_text = entry["date"]
 
         change = close - prev_close
         change_sign = "+" if change >= 0 else "-"
