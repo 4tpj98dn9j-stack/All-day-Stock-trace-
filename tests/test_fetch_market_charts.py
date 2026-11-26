@@ -63,6 +63,25 @@ class VxTermStructureTests(unittest.TestCase):
         self.assertNotIn("2026-10-20", series["VX1"])
 
 
+class FetchFredTests(unittest.TestCase):
+    def test_drops_weekends_and_dates_before_the_window(self):
+        observations = [
+            {"date": "2026-11-23", "value": "4"},  # Monday
+            {"date": "2026-11-22", "value": "4"},  # Sunday
+            {"date": "2026-11-21", "value": "4"},  # Saturday
+            {"date": "2026-11-20", "value": "4"},  # Friday
+            {"date": "2026-05-01", "value": "4"},  # before the window
+        ]
+        with patch("fetch_market_charts.fetch_latest_observations", return_value=observations):
+            result = mc.fetch_fred("DFEDTARU", "key", START)
+
+        self.assertEqual(sorted(result), ["2026-11-20", "2026-11-23"])
+
+    def test_failure_is_empty(self):
+        with patch("fetch_market_charts.fetch_latest_observations", side_effect=RuntimeError("down")):
+            self.assertEqual(mc.fetch_fred("DGS10", "key", START), {})
+
+
 class LatestSummaryTests(unittest.TestCase):
     def test_pct_change(self):
         latest = mc.latest_summary(

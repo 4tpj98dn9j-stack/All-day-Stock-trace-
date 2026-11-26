@@ -448,13 +448,20 @@ function drawPanelChart(state) {
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
   ctx.fillStyle = "#999";
-  xTicks.forEach((tick) => {
+  // Placed right to left, skipping any label that would run into the one
+  // already drawn on its right. A window that starts late in a month gets a
+  // stub tick for that month right beside the next one; going right to left
+  // drops the stub and keeps the full month.
+  let nextLeft = Infinity;
+  [...xTicks].reverse().forEach((tick) => {
     // Nudge the end labels inward instead of letting them run off the
     // canvas -- a bucket label like "15년+" sits right on the last point,
     // so centring it would clip half of it.
     const half = ctx.measureText(tick.label).width / 2;
     const x = Math.min(Math.max(toX(tick.index), half + 1), width - half - 1);
+    if (x + half > nextLeft - 6) return;
     ctx.fillText(tick.label, x, height - PANEL_PAD.bottom + 4);
+    nextLeft = x - half;
   });
 
   lines.forEach((line, i) => {
@@ -571,45 +578,6 @@ function drawPanelTooltip(ctx, { width, height, toX, toY, state, highlight }) {
 
 function redrawPanelCharts() {
   panelCharts.forEach(drawPanelChart);
-}
-
-async function loadCreditCurve() {
-  const panelsEl = document.getElementById("credit-curve-panels");
-  const sourceEl = document.getElementById("credit-curve-source");
-
-  try {
-    const res = await fetch("/api/credit-curve");
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status}`);
-    }
-    const data = await res.json();
-
-    const buckets = data.buckets || [];
-    const snapshots = (data.snapshots || []).filter((s) => s.values.some((v) => v != null));
-    if (!buckets.length || !snapshots.length) {
-      throw new Error("no curve");
-    }
-
-    sourceEl.textContent = `출처: ${data.source || "ICE BofA (FRED)"} · ${data.unit || "bp"}, ${data.latest_date || ""} 기준`;
-
-    const lines = snapshots.map((snapshot) => ({ name: snapshot.name, values: snapshot.values }));
-
-    panelsEl.innerHTML = "";
-    panelsEl.appendChild(
-      buildChartPanel("만기별 스프레드 (투자등급 전체)", lines, {
-        // One tick per maturity bucket -- the x axis is the bucket itself,
-        // not a date, so every position gets a label.
-        xTicks: buckets.map((label, index) => ({ index, label })),
-        pointLabel: (i) => buckets[i],
-        formatValue: (v) => `${Math.round(v)}bp`,
-      }),
-    );
-
-    redrawPanelCharts();
-  } catch (err) {
-    panelsEl.innerHTML = `<div class="error">회사채 스프레드 커브를 불러오지 못했습니다.</div>`;
-    sourceEl.textContent = "";
-  }
 }
 
 // --- market comparison cards (data/market_charts.json) --------------------
@@ -862,7 +830,6 @@ async function refreshAll() {
     await Promise.all([
       loadMarketSummary(),
       loadMacroData(),
-      loadCreditCurve(),
       loadMarketCharts(),
       loadQuotes(),
       loadDailyReport(),

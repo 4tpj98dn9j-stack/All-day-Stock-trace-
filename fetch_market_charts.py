@@ -246,7 +246,12 @@ def fetch_yahoo(symbol, start):
 
 
 def fetch_fred(series_id, api_key, start):
-    """{date: value} for one FRED series from `start`, or {} on failure."""
+    """{date: value} for one FRED series from `start`, or {} on failure.
+
+    Weekends are dropped: a few FRED series (the fed funds target range)
+    are published every calendar day, and their Saturdays and Sundays would
+    otherwise widen the card's date axis with days nothing else trades on.
+    """
     try:
         observations = fetch_latest_observations(series_id, api_key, count=FRED_FETCH_COUNT)
     except Exception:
@@ -255,6 +260,7 @@ def fetch_fred(series_id, api_key, start):
         obs["date"]: round(float(obs["value"]), 4)
         for obs in observations
         if obs["date"] >= start.isoformat()
+        and datetime.strptime(obs["date"], "%Y-%m-%d").weekday() < 5
     }
 
 
