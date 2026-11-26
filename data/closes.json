@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-11-26T03:33:19Z",
+  "updated_at": "2026-11-26T05:22:18Z",
   "reference_symbol": "^GSPC",
   "reference_date": "2026-11-25",
   "indices": {
@@ -20,30 +20,30 @@
     "^IXIC": {
       "name": "나스닥종합지수",
       "date": "2026-11-25",
-      "close": 23585.8027,
+      "close": 23585.8008,
       "prev_close": 23733.5391,
       "pct_change": -0.6225
     },
     "^NDX": {
       "name": "나스닥100",
       "date": "2026-11-25",
-      "close": 26046.8965,
+      "close": 26046.9004,
       "prev_close": 26214.1699,
       "pct_change": -0.6381
     },
     "NQ=F": {
       "name": "나스닥100 선물",
-      "date": "2026-11-25",
-      "close": 26306.75,
-      "prev_close": 26275.75,
-      "pct_change": 0.118
+      "date": "2026-11-26",
+      "close": 26394.25,
+      "prev_close": 26100.25,
+      "pct_change": 1.1264
     },
     "^RUT": {
       "name": "러셀2000",
       "date": "2026-11-25",
-      "close": 2704.061,
+      "close": 2704.0601,
       "prev_close": 2684.9399,
-      "pct_change": 0.7122
+      "pct_change": 0.7121
     },
     "^VIX": {
       "name": "VIX",
