@@ -230,87 +230,16 @@ async function loadMacroData() {
   }
 }
 
-// Categorical palette for the multi-series panels (SCOOS, credit curve),
-// capped at three series because that's the widest set that stays
-// distinguishable under colour-vision deficiency. Each slot also gets its
-// own dash pattern, so identity never rests on hue alone.
+// Categorical palette for the multi-series panel charts (currently the
+// credit curve), capped at three series because that's the widest set that
+// stays distinguishable under colour-vision deficiency. Each slot also gets
+// its own dash pattern, so identity never rests on hue alone.
 const PANEL_SERIES_COLORS = ["#2a78d6", "#eb6834", "#1baf7a"];
 const PANEL_SERIES_DASHES = [[], [6, 4], [2, 3]];
 
 // Every rendered panel chart, kept so a resize (or a hover leaving the
 // canvas) can redraw them without refetching.
 const panelCharts = [];
-
-function formatNetPercent(value) {
-  return `${value > 0 ? "+" : ""}${value.toFixed(1)}`;
-}
-
-function quarterLabel(dateStr) {
-  const [year, month] = dateStr.split("-").map(Number);
-  return `${year} Q${Math.floor((month - 1) / 3) + 1}`;
-}
-
-async function loadScoosData() {
-  const groupsEl = document.getElementById("scoos-groups");
-  const quarterEl = document.getElementById("scoos-quarter");
-  const sourceEl = document.getElementById("scoos-source");
-
-  try {
-    const res = await fetch("/api/scoos-data");
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status}`);
-    }
-    const data = await res.json();
-
-    quarterEl.textContent = data.latest_quarter ? `${data.latest_quarter} 기준` : "";
-    sourceEl.textContent = `출처: ${data.source || "Federal Reserve Board, SCOOS"} · ${data.unit || "순비율(%)"}, 분기`;
-
-    groupsEl.innerHTML = "";
-    (data.groups || []).forEach((group) => {
-      const groupEl = document.createElement("div");
-      groupEl.className = "scoos-group";
-      groupEl.innerHTML = `
-        <h3 class="scoos-group-title">${escapeHtml(group.title)}</h3>
-        <p class="chart-group-desc">${escapeHtml(group.description || "")}</p>
-      `;
-
-      (group.panels || []).forEach((panel) => {
-        const drawable = (panel.series || []).filter(
-          (s) => !s.error && s.history && s.history.length > 1,
-        );
-        if (!drawable.length) {
-          return;
-        }
-        groupEl.appendChild(buildScoosPanel(panel.title, drawable));
-      });
-
-      groupsEl.appendChild(groupEl);
-    });
-
-    redrawPanelCharts();
-  } catch (err) {
-    groupsEl.innerHTML = `<div class="error">SCOOS 데이터를 불러오지 못했습니다.</div>`;
-    quarterEl.textContent = "";
-    sourceEl.textContent = "";
-  }
-}
-
-function buildScoosPanel(title, series) {
-  // All the panel's series share the survey calendar, but build the date
-  // axis as a union anyway so a series that starts late (or skips a
-  // quarter) lines up instead of shifting the whole line sideways.
-  const dates = [...new Set(series.flatMap((s) => s.history.map((p) => p.date)))].sort();
-  const lines = series.map((s) => {
-    const byDate = new Map(s.history.map((p) => [p.date, p.value]));
-    return { name: s.name, values: dates.map((d) => (byDate.has(d) ? byDate.get(d) : null)) };
-  });
-
-  return buildChartPanel(title, lines, {
-    xTicks: scoosYearTicks(dates),
-    pointLabel: (i) => quarterLabel(dates[i]),
-    formatValue: formatNetPercent,
-  });
-}
 
 /* Build one multi-series panel: title, legend, canvas and pointer handling.
  *
@@ -393,17 +322,6 @@ function niceAxisScale(min, max, targetTicks = 4) {
   const magnitude = Math.pow(10, Math.floor(Math.log10(rough)));
   const step = [1, 2, 2.5, 5, 10].map((m) => m * magnitude).find((s) => s >= rough) || 10 * magnitude;
   return { lo: Math.floor(min / step) * step, hi: Math.ceil(max / step) * step, step };
-}
-
-function scoosYearTicks(dates) {
-  // Label the first quarter of every other year, matching the Fed's own
-  // exhibit charts; fall back to every year for a short series.
-  const firstQuarters = dates
-    .map((date, index) => ({ date, index }))
-    .filter(({ date }) => date.endsWith("-01-01"));
-  const everyOther = firstQuarters.filter(({ date }) => Number(date.slice(0, 4)) % 2 === 0);
-  const chosen = everyOther.length >= 3 ? everyOther : firstQuarters;
-  return chosen.map(({ date, index }) => ({ index, label: date.slice(0, 4) }));
 }
 
 function drawPanelChart(state) {
@@ -707,10 +625,10 @@ async function refreshAll() {
   btn.disabled = true;
   btn.textContent = "불러오는 중...";
 
-  // Both panel sections rebuild their canvases from scratch, so drop the
-  // old chart states here rather than in either loader -- they run
-  // concurrently, and one clearing the shared list would discard the
-  // other's freshly registered panels.
+  // Panel sections rebuild their canvases from scratch, so drop the old
+  // chart states here rather than inside a loader -- loaders run
+  // concurrently, and one clearing the shared list would discard another's
+  // freshly registered panels.
   panelCharts.length = 0;
 
   try {
@@ -718,7 +636,6 @@ async function refreshAll() {
       loadMarketSummary(),
       loadMacroData(),
       loadCreditCurve(),
-      loadScoosData(),
       loadQuotes(),
       loadDailyReport(),
     ]);
@@ -1124,7 +1041,7 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-// The SCOOS charts are laid out inline (not in a modal), so they have to
+// The panel charts are laid out inline (not in a modal), so they have to
 // re-render at the new width when the window or phone orientation changes.
 let panelResizeTimer = null;
 window.addEventListener("resize", () => {

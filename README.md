@@ -111,7 +111,9 @@ pip install -r requirements.txt
 
 SCOOS(Senior Credit Officer Opinion Survey on Dealer Financing Terms)는 헤지펀드·REIT 등에 자금을 대주는 대형 딜러들을 대상으로 한 연준의 분기 설문입니다. 스프레드·MOVE 같은 시장 가격 지표가 간접적으로만 보여주는 "신용시장 뒷단의 자금 사정"을 딜러들이 직접 답한 자료라, 매크로 지표와 성격이 다릅니다.
 
-대시보드는 두 그룹으로 보여줍니다:
+> **대시보드에서는 내렸습니다.** 데이터 수집(워크플로·`data/scoos.json`)과 `/api/scoos-data` 엔드포인트는 그대로 남아 있어서, 다시 띄우려면 화면 쪽(템플릿 섹션과 `static/script.js`의 로더)만 되살리면 됩니다.
+
+`data/scoos.json`은 두 그룹으로 구성됩니다:
 
 - **기초시장 유동성·기능 개선 응답** — 투자등급/하이일드 회사채, CMBS, Agency/Non-agency RMBS, 소비자 ABS
 - **자금조달 수요 증가 응답** — 투자등급/하이일드 회사채, 주식, CMBS, Agency/Non-agency RMBS, 소비자 ABS
@@ -119,9 +121,8 @@ SCOOS(Senior Credit Officer Opinion Survey on Dealer Financing Terms)는 헤지�
 값은 모두 **순비율(net percentage)** 입니다 — "늘었다(좋아졌다)"고 답한 딜러 비율에서 "줄었다(나빠졌다)"고 답한 비율을 뺀 값이라, 수준이 아니라 방향을 나타냅니다.
 
 - 연준은 이 설문을 [federalreserve.gov/data/scoos.htm](https://www.federalreserve.gov/data/scoos.htm)에 HTML/PDF exhibit으로 공개하는데, **같은 exhibit 차트의 순비율 시리즈가 FRED 릴리스 571에 `EXHE<exhibit>C<chart>Q<question>NP` 형태로 그대로 올라와 있습니다.** 그래서 문항별 응답자 수(`SFQ*NR`)로 순비율을 직접 재계산하지 않고 이 시리즈를 그대로 가져옵니다 — 연준이 인쇄한 숫자와 동일합니다.
-- 패널 구성은 FRED의 차트 번호(`C1`~`C6`)를 그대로 따릅니다. 연준 Exhibit 3의 원본 배치와 같습니다.
-- 한 패널당 시리즈는 최대 3개입니다. 색각 이상에서도 구분되는 범주형 색상이 3개까지만 검증되기 때문이고, 색 외에 선 모양(실선·긴 점선·짧은 점선)으로도 구분합니다.
-- 차트를 누르거나 마우스를 올리면 해당 분기의 각 시리즈 값이 표시됩니다. 데이터는 2011년 4분기부터 전 구간을 담고 있습니다.
+- 패널 구성은 FRED의 차트 번호(`C1`~`C6`)를 그대로 따릅니다. 연준 Exhibit 3의 원본 배치와 같습니다. 한 패널당 시리즈는 최대 3개입니다.
+- 데이터는 2011년 4분기부터 전 구간을 담고 있습니다.
 
 ## 회사채 스프레드 커브
 
