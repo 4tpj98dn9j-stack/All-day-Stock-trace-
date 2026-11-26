@@ -1,104 +1,104 @@
 {
-  "updated_at": "2026-11-25T04:01:08Z",
+  "updated_at": "2026-11-26T03:33:19Z",
   "reference_symbol": "^GSPC",
-  "reference_date": "2026-11-24",
+  "reference_date": "2026-11-25",
   "indices": {
     "^GSPC": {
       "name": "S&P500",
-      "date": "2026-11-24",
-      "close": 7201.0898,
-      "prev_close": 7237.1699,
-      "pct_change": -0.4985
+      "date": "2026-11-25",
+      "close": 7182.7798,
+      "prev_close": 7201.0898,
+      "pct_change": -0.2543
     },
     "^DJI": {
       "name": "다우지수",
-      "date": "2026-11-24",
-      "close": 50018.6992,
-      "prev_close": 49595.3086,
-      "pct_change": 0.8537
+      "date": "2026-11-25",
+      "close": 50182.9492,
+      "prev_close": 50018.6992,
+      "pct_change": 0.3284
     },
     "^IXIC": {
       "name": "나스닥종합지수",
-      "date": "2026-11-24",
-      "close": 23733.5352,
-      "prev_close": 24089.5605,
-      "pct_change": -1.4779
+      "date": "2026-11-25",
+      "close": 23585.8027,
+      "prev_close": 23733.5391,
+      "pct_change": -0.6225
     },
     "^NDX": {
       "name": "나스닥100",
-      "date": "2026-11-24",
-      "close": 26214.168,
-      "prev_close": 26746.0996,
-      "pct_change": -1.9888
+      "date": "2026-11-25",
+      "close": 26046.8965,
+      "prev_close": 26214.1699,
+      "pct_change": -0.6381
     },
     "NQ=F": {
       "name": "나스닥100 선물",
-      "date": "2026-11-24",
-      "close": 25995.75,
-      "prev_close": 26808.0,
-      "pct_change": -3.0299
+      "date": "2026-11-25",
+      "close": 26306.75,
+      "prev_close": 26275.75,
+      "pct_change": 0.118
     },
     "^RUT": {
       "name": "러셀2000",
-      "date": "2026-11-24",
-      "close": 2684.9419,
-      "prev_close": 2669.6599,
-      "pct_change": 0.5724
+      "date": "2026-11-25",
+      "close": 2704.061,
+      "prev_close": 2684.9399,
+      "pct_change": 0.7122
     },
     "^VIX": {
       "name": "VIX",
-      "date": "2026-11-24",
-      "close": 26.36,
-      "prev_close": 26.62,
-      "pct_change": -0.9767
+      "date": "2026-11-25",
+      "close": 28.29,
+      "prev_close": 26.36,
+      "pct_change": 7.3217
     }
   },
   "holdings": {
     "NOW": {
-      "date": "2026-11-24",
-      "close": 91.74,
-      "prev_close": 91.72,
-      "pct_change": 0.0218,
+      "date": "2026-11-25",
+      "close": 92.16,
+      "prev_close": 91.74,
+      "pct_change": 0.4578,
       "source": "history",
       "stale": false
     },
     "TSLA": {
-      "date": "2026-11-24",
-      "close": 384.68,
-      "prev_close": 385.46,
-      "pct_change": -0.2024,
+      "date": "2026-11-25",
+      "close": 380.14,
+      "prev_close": 384.68,
+      "pct_change": -1.1802,
       "source": "history",
       "stale": false
     },
     "SPCX": {
-      "date": "2026-11-24",
-      "close": 125.81,
-      "prev_close": 133.35,
-      "pct_change": -5.6543,
+      "date": "2026-11-25",
+      "close": 127.44,
+      "prev_close": 125.81,
+      "pct_change": 1.2956,
       "source": "history",
       "stale": false
     },
     "INFQ": {
-      "date": "2026-11-24",
-      "close": 6.34,
-      "prev_close": 6.75,
-      "pct_change": -6.0741,
+      "date": "2026-11-25",
+      "close": 6.49,
+      "prev_close": 6.34,
+      "pct_change": 2.3659,
       "source": "history",
       "stale": false
     },
     "PL": {
-      "date": "2026-11-24",
-      "close": 10.64,
-      "prev_close": 11.21,
-      "pct_change": -5.0847,
+      "date": "2026-11-25",
+      "close": 10.61,
+      "prev_close": 10.64,
+      "pct_change": -0.282,
       "source": "history",
       "stale": false
     },
     "QCOM": {
-      "date": "2026-11-24",
-      "close": 164.96,
-      "prev_close": 165.38,
-      "pct_change": -0.254,
+      "date": "2026-11-25",
+      "close": 168.66,
+      "prev_close": 164.96,
+      "pct_change": 2.243,
       "source": "history",
       "stale": false
     }
