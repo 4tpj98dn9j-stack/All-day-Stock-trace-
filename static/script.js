@@ -230,48 +230,89 @@ async function loadMacroData() {
   }
 }
 
-// Categorical palette for the multi-series panel charts (currently the
-// credit curve), capped at three series because that's the widest set that
-// stays distinguishable under colour-vision deficiency. Each slot also gets
-// its own dash pattern, so identity never rests on hue alone.
-const PANEL_SERIES_COLORS = ["#2a78d6", "#eb6834", "#1baf7a"];
-const PANEL_SERIES_DASHES = [[], [6, 4], [2, 3]];
+// Categorical palette for the multi-series panel charts, in fixed order
+// (never cycled). Validated as a line-chart palette on the white card
+// surface; the three lighter slots sit under 3:1 contrast, which is why
+// every series also gets its own dash pattern and a legend with its
+// current value, so identity never rests on hue alone.
+const PANEL_SERIES_COLORS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4"];
+const PANEL_SERIES_DASHES = [[], [6, 4], [2, 3], [9, 3, 2, 3], [14, 4]];
 
 // Every rendered panel chart, kept so a resize (or a hover leaving the
 // canvas) can redraw them without refetching.
 const panelCharts = [];
 
+function legendSwatch(i) {
+  // An SVG stroke with the same dash array as the canvas line, so the
+  // legend shows exactly what the chart draws.
+  const color = PANEL_SERIES_COLORS[i % PANEL_SERIES_COLORS.length];
+  const dash = PANEL_SERIES_DASHES[i % PANEL_SERIES_DASHES.length].join(" ");
+  return `<svg class="chart-legend-line" width="18" height="4" aria-hidden="true">
+    <line x1="0" y1="2" x2="18" y2="2" stroke="${color}" stroke-width="2"${dash ? ` stroke-dasharray="${dash}"` : ""}/>
+  </svg>`;
+}
+
+function legendItem(line, i, withSwatch) {
+  const value = line.legendValue
+    ? `<span class="chart-legend-value">${escapeHtml(line.legendValue)}</span>`
+    : "";
+  const change = line.legendChange
+    ? `<span class="chart-legend-change ${line.legendChange.dir}">${escapeHtml(line.legendChange.text)}</span>`
+    : "";
+  const note = line.legendNote
+    ? `<span class="chart-legend-note">${escapeHtml(line.legendNote)}</span>`
+    : "";
+  return `
+    <span class="chart-legend-item">
+      ${withSwatch ? legendSwatch(i) : ""}
+      ${escapeHtml(line.name)} ${value} ${change} ${note}
+    </span>
+  `;
+}
+
 /* Build one multi-series panel: title, legend, canvas and pointer handling.
  *
  * `lines` is [{name, values}] where every `values` array is the same length
- * -- one entry per x position, null for a gap. `options` supplies what the
- * x axis means: `xTicks` as [{index, label}], `pointLabel(i)` for the
- * tooltip heading, and `formatValue(v)` for the numbers in it.
+ * -- one entry per x position, null for a gap. A line may also carry
+ * `legendValue`/`legendChange`/`legendNote` for the legend, and
+ * `describe(i)` for its tooltip row (defaults to `formatValue(value)`).
+ *
+ * `options` supplies what the x axis means -- `xTicks` as [{index, label}],
+ * `pointLabel(i)` for the tooltip heading -- plus how to draw:
+ *   includeZero  keep 0 on the y scale (default true)
+ *   refLine      a value to mark with a dashed rule, e.g. a 1.0 threshold
+ *   connectGaps  draw straight through null days instead of breaking
+ *   yFormat      label for a y tick, (value, decimals) => string; decimals
+ *                is what suits the tick step (default: just that)
+ *   size         "main" or the shorter "sub"
  */
-function buildChartPanel(title, lines, { xTicks, pointLabel, formatValue }) {
+function buildChartPanel(title, lines, options) {
+  const {
+    xTicks,
+    pointLabel,
+    formatValue = (v) => String(v),
+    includeZero = true,
+    refLine = null,
+    connectGaps = false,
+    yFormat = null,
+    size = "main",
+  } = options;
   const panelEl = document.createElement("div");
   panelEl.className = "chart-panel";
 
-  // A lone series is already named by the panel title, so a legend
-  // repeating it would just be noise.
-  const legend = lines.length < 2
-    ? ""
-    : `<div class="chart-legend">${lines
-        .map((line, i) => {
-          const style = ["solid", "dashed", "dotted"][i] || "solid";
-          return `
-            <span class="chart-legend-item">
-              <span class="chart-legend-line" style="border-top-color:${PANEL_SERIES_COLORS[i]};border-top-style:${style}"></span>
-              ${escapeHtml(line.name)}
-            </span>
-          `;
-        })
-        .join("")}</div>`;
+  // A lone series is already named by the panel title, so it only gets a
+  // legend line when there's a current value to show, and no swatch.
+  let legend = "";
+  if (lines.length > 1) {
+    legend = `<div class="chart-legend">${lines.map((line, i) => legendItem(line, i, true)).join("")}</div>`;
+  } else if (lines.length === 1 && lines[0].legendValue) {
+    legend = `<div class="chart-legend">${legendItem(lines[0], 0, false)}</div>`;
+  }
 
   panelEl.innerHTML = `
-    <div class="chart-panel-title">${escapeHtml(title)}</div>
+    ${title ? `<div class="chart-panel-title">${escapeHtml(title)}</div>` : ""}
     ${legend}
-    <canvas class="panel-chart"></canvas>
+    <canvas class="panel-chart${size === "sub" ? " sub" : ""}"></canvas>
   `;
 
   const canvas = panelEl.querySelector(".panel-chart");
@@ -282,6 +323,10 @@ function buildChartPanel(title, lines, { xTicks, pointLabel, formatValue }) {
     xTicks,
     pointLabel,
     formatValue,
+    includeZero,
+    refLine,
+    connectGaps,
+    yFormat,
     pointCount: lines[0] ? lines[0].values.length : 0,
     highlight: null,
   };
@@ -317,15 +362,23 @@ function nearestPanelIndex(state, x, width) {
 }
 
 function niceAxisScale(min, max, targetTicks = 4) {
-  const span = Math.max(max - min, 1);
+  // A flat series still needs a non-zero span to pick a step from.
+  const span = max - min || Math.abs(max) * 0.1 || 1;
   const rough = span / targetTicks;
   const magnitude = Math.pow(10, Math.floor(Math.log10(rough)));
   const step = [1, 2, 2.5, 5, 10].map((m) => m * magnitude).find((s) => s >= rough) || 10 * magnitude;
   return { lo: Math.floor(min / step) * step, hi: Math.ceil(max / step) * step, step };
 }
 
+function axisDecimals(step) {
+  if (step >= 1) return 0;
+  if (step >= 0.1) return 1;
+  if (step >= 0.01) return 2;
+  return 3;
+}
+
 function drawPanelChart(state) {
-  const { canvas, lines, xTicks, pointCount, highlight } = state;
+  const { canvas, lines, xTicks, pointCount, highlight, includeZero, refLine, connectGaps, yFormat } = state;
   const ctx = canvas.getContext("2d");
   const dpr = window.devicePixelRatio || 1;
   const width = canvas.clientWidth || 300;
@@ -342,11 +395,17 @@ function drawPanelChart(state) {
     return;
   }
 
-  // Always include zero: these panels plot spreads and net percentages,
-  // where the distance from zero is the whole point, so a scale that
-  // floated off the zero line would exaggerate every wiggle.
-  const { lo, hi, step } = niceAxisScale(Math.min(0, ...allValues), Math.max(0, ...allValues));
+  // Zero stays on the scale by default: for spreads and rebased % the
+  // distance from zero is the point, and a floating scale would exaggerate
+  // every wiggle. Level panels like yields or VIX opt out. A reference line
+  // is always kept in view, or it couldn't mark its threshold.
+  const extent = [...allValues];
+  if (includeZero) extent.push(0);
+  if (refLine != null) extent.push(refLine);
+  const { lo, hi, step } = niceAxisScale(Math.min(...extent), Math.max(...extent));
   const valueRange = hi - lo || 1;
+  const decimals = axisDecimals(step);
+  const tickLabel = yFormat || ((v, d) => v.toFixed(d));
 
   const plotWidth = Math.max(width - PANEL_PAD.left - PANEL_PAD.right, 1);
   const plotHeight = Math.max(height - PANEL_PAD.top - PANEL_PAD.bottom, 1);
@@ -357,7 +416,11 @@ function drawPanelChart(state) {
   ctx.font = "10px -apple-system, sans-serif";
   ctx.textAlign = "right";
   ctx.textBaseline = "middle";
-  for (let v = lo; v <= hi + step / 2; v += step) {
+  // Ticks computed from an index rather than by repeated addition, so
+  // 0.1-sized steps don't drift into labels like 0.30000000000000004.
+  const tickCount = Math.round((hi - lo) / step);
+  for (let k = 0; k <= tickCount; k++) {
+    const v = lo + k * step;
     const y = toY(v);
     ctx.beginPath();
     ctx.moveTo(PANEL_PAD.left, y);
@@ -367,7 +430,19 @@ function drawPanelChart(state) {
     ctx.setLineDash([]);
     ctx.stroke();
     ctx.fillStyle = "#999";
-    ctx.fillText(String(Math.round(v)), PANEL_PAD.left - 5, y);
+    ctx.fillText(tickLabel(v, decimals), PANEL_PAD.left - 5, y);
+  }
+
+  if (refLine != null) {
+    const y = toY(refLine);
+    ctx.beginPath();
+    ctx.moveTo(PANEL_PAD.left, y);
+    ctx.lineTo(width - PANEL_PAD.right, y);
+    ctx.strokeStyle = "#8e8e93";
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 3]);
+    ctx.stroke();
+    ctx.setLineDash([]);
   }
 
   ctx.textAlign = "center";
@@ -387,7 +462,9 @@ function drawPanelChart(state) {
     let drawing = false;
     line.values.forEach((value, index) => {
       if (value == null) {
-        drawing = false;
+        // Markets close on different holidays; with connectGaps the line
+        // runs straight through a missing day rather than breaking.
+        if (!connectGaps) drawing = false;
         return;
       }
       const x = toX(index);
@@ -430,7 +507,8 @@ function drawPanelTooltip(ctx, { width, height, toX, toY, state, highlight }) {
       return;
     }
     const color = PANEL_SERIES_COLORS[i % PANEL_SERIES_COLORS.length];
-    rows.push({ color, text: `${line.name}: ${formatValue(value)}` });
+    const detail = line.describe ? line.describe(highlight) : formatValue(value);
+    rows.push({ color, text: `${line.name}: ${detail}` });
 
     // 2px surface ring so a marker stays readable where two lines cross.
     const y = toY(value);
@@ -531,6 +609,155 @@ async function loadCreditCurve() {
   } catch (err) {
     panelsEl.innerHTML = `<div class="error">회사채 스프레드 커브를 불러오지 못했습니다.</div>`;
     sourceEl.textContent = "";
+  }
+}
+
+// --- market comparison cards (data/market_charts.json) --------------------
+
+function formatSeriesValue(series, value) {
+  const number = value.toLocaleString("en-US", {
+    minimumFractionDigits: series.decimals,
+    maximumFractionDigits: series.decimals,
+  });
+  return `${series.prefix}${number}${series.suffix}`;
+}
+
+// Mirrors change_value() in fetch_market_charts.py, for tooltip rows.
+function seriesChange(kind, value, previous) {
+  if (previous == null) return null;
+  if (kind === "bp") return (value - previous) * 100;
+  if (kind === "abs") return value - previous;
+  if (previous === 0) return null;
+  return (value / previous - 1) * 100;
+}
+
+function formatSeriesChange(kind, change, decimals) {
+  if (change == null) return null;
+  const sign = change < 0 ? "-" : "+";
+  const size = Math.abs(change);
+  if (kind === "bp") return `${sign}${size.toFixed(0)}bp`;
+  if (kind === "abs") return `${sign}${size.toFixed(decimals)}`;
+  return `${sign}${size.toFixed(2)}%`;
+}
+
+/* What a panel plots, given the raw values:
+ *   rebased  % change from each series' first value in the window
+ *   minmax   position within the series' own 6-month low..high, 0..100,
+ *            for overlaying series whose units don't share a scale
+ *   level    the values as they are
+ * Tooltips and legends always show the raw values either way.
+ */
+function plottedValues(mode, values) {
+  const present = values.filter((v) => v != null);
+  if (!present.length) return values;
+  if (mode === "rebased") {
+    const base = present[0];
+    return values.map((v) => (v == null || !base ? null : (v / base - 1) * 100));
+  }
+  if (mode === "minmax") {
+    const low = Math.min(...present);
+    const span = Math.max(...present) - low;
+    return values.map((v) => (v == null ? null : span ? ((v - low) / span) * 100 : 50));
+  }
+  return values;
+}
+
+function panelYFormat(mode) {
+  if (mode === "rebased") return (v, decimals) => `${v.toFixed(decimals)}%`;
+  // A min-max axis has no units to read off, only its two ends.
+  if (mode === "minmax") return (v) => (v === 0 ? "최저" : v === 100 ? "최고" : "");
+  return null;
+}
+
+function marketLine(series, mode) {
+  const { latest } = series;
+  const describe = (i) => {
+    const value = series.values[i];
+    let previous = null;
+    for (let j = i - 1; j >= 0; j--) {
+      if (series.values[j] != null) {
+        previous = series.values[j];
+        break;
+      }
+    }
+    const change = formatSeriesChange(series.change, seriesChange(series.change, value, previous), series.decimals);
+    return change ? `${formatSeriesValue(series, value)} ${change}` : formatSeriesValue(series, value);
+  };
+  const changeText = formatSeriesChange(series.change, latest.change, series.decimals);
+  return {
+    name: series.name,
+    values: plottedValues(mode, series.values),
+    describe,
+    legendValue: latest.display || formatSeriesValue(series, latest.value),
+    legendChange: changeText ? { text: changeText, dir: latest.change < 0 ? "down" : "up" } : null,
+    legendNote: latest.note || null,
+  };
+}
+
+function buildMarketCard(card) {
+  const section = document.createElement("section");
+  section.className = "market-summary market-chart-card";
+
+  const status = card.status
+    ? `<p class="chart-status ${card.status.level}">${card.status.level === "warning" ? "⚠️ " : ""}${escapeHtml(card.status.text)}</p>`
+    : "";
+  section.innerHTML = `
+    <h2 class="market-summary-title">${escapeHtml(card.title)}</h2>
+    ${status}
+    <div class="market-chart-panels"></div>
+    <p class="chart-group-desc">${escapeHtml(card.description)}</p>
+  `;
+
+  const panelsEl = section.querySelector(".market-chart-panels");
+  const dates = card.dates || [];
+  const xTicks = dates.length ? pickXAxisTicks(dates.map((date) => ({ date }))) : [];
+
+  (card.panels || []).forEach((panel) => {
+    // A series whose source failed this run is dropped rather than drawn
+    // as an empty line; the rest of the panel still renders.
+    const lines = panel.series
+      .filter((s) => s.latest && s.values.some((v) => v != null))
+      .map((s) => marketLine(s, panel.mode));
+    if (!lines.length) return;
+
+    panelsEl.appendChild(
+      buildChartPanel(panel.title, lines, {
+        xTicks,
+        pointLabel: (i) => dates[i],
+        includeZero: panel.include_zero,
+        refLine: panel.ref_line,
+        connectGaps: true,
+        yFormat: panelYFormat(panel.mode),
+        size: panel.size,
+      }),
+    );
+  });
+
+  if (!panelsEl.children.length) {
+    panelsEl.innerHTML = `<div class="error">데이터를 불러오지 못했습니다.</div>`;
+  }
+  return section;
+}
+
+async function loadMarketCharts() {
+  const container = document.getElementById("market-charts");
+
+  try {
+    const res = await fetch("/api/market-charts");
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+    const data = await res.json();
+
+    container.innerHTML = "";
+    (data.cards || []).forEach((card) => container.appendChild(buildMarketCard(card)));
+    redrawPanelCharts();
+  } catch (err) {
+    container.innerHTML = `
+      <section class="market-summary">
+        <div class="error">시장 비교 차트를 불러오지 못했습니다.</div>
+      </section>
+    `;
   }
 }
 
@@ -636,6 +863,7 @@ async function refreshAll() {
       loadMarketSummary(),
       loadMacroData(),
       loadCreditCurve(),
+      loadMarketCharts(),
       loadQuotes(),
       loadDailyReport(),
     ]);

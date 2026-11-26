@@ -32,6 +32,7 @@ DAILY_REPORT_DIR = Path("daily")
 MACRO_DATA_PATH = Path("data/macro.json")
 SCOOS_DATA_PATH = Path("data/scoos.json")
 CREDIT_CURVE_PATH = Path("data/credit_curve.json")
+MARKET_CHARTS_PATH = Path("data/market_charts.json")
 
 NEWS_LIMIT = 5
 
@@ -173,6 +174,21 @@ def credit_curve_endpoint():
         content = json.loads(CREDIT_CURVE_PATH.read_text(encoding="utf-8"))
     except Exception as exc:
         app.logger.warning("Failed to read credit curve %s: %s", CREDIT_CURVE_PATH, exc)
+        return jsonify({"error": "no data"}), 404
+
+    return jsonify(content)
+
+
+@app.route("/api/market-charts")
+def market_charts_endpoint():
+    """Return the most recently committed data/market_charts.json (see fetch_market_charts.py)."""
+    if not MARKET_CHARTS_PATH.is_file():
+        return jsonify({"error": "no data"}), 404
+
+    try:
+        content = json.loads(MARKET_CHARTS_PATH.read_text(encoding="utf-8"))
+    except Exception as exc:
+        app.logger.warning("Failed to read market charts %s: %s", MARKET_CHARTS_PATH, exc)
         return jsonify({"error": "no data"}), 404
 
     return jsonify(content)
