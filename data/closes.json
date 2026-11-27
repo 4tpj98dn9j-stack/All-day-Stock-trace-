@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-11-26T05:22:18Z",
+  "updated_at": "2026-11-27T03:38:40Z",
   "reference_symbol": "^GSPC",
   "reference_date": "2026-11-25",
   "indices": {
@@ -34,9 +34,9 @@
     "NQ=F": {
       "name": "나스닥100 선물",
       "date": "2026-11-26",
-      "close": 26394.25,
+      "close": 26708.5,
       "prev_close": 26100.25,
-      "pct_change": 1.1264
+      "pct_change": 2.3304
     },
     "^RUT": {
       "name": "러셀2000",
@@ -47,10 +47,10 @@
     },
     "^VIX": {
       "name": "VIX",
-      "date": "2026-11-25",
-      "close": 28.29,
-      "prev_close": 26.36,
-      "pct_change": 7.3217
+      "date": "2026-11-26",
+      "close": 26.8,
+      "prev_close": 28.29,
+      "pct_change": -5.2669
     }
   },
   "holdings": {
