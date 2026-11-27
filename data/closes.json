@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-11-27T03:38:40Z",
+  "updated_at": "2026-11-27T05:16:54Z",
   "reference_symbol": "^GSPC",
   "reference_date": "2026-11-25",
   "indices": {
@@ -33,10 +33,10 @@
     },
     "NQ=F": {
       "name": "나스닥100 선물",
-      "date": "2026-11-26",
-      "close": 26708.5,
+      "date": "2026-11-27",
+      "close": 26784.75,
       "prev_close": 26100.25,
-      "pct_change": 2.3304
+      "pct_change": 2.6226
     },
     "^RUT": {
       "name": "러셀2000",
