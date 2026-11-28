@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-11-28T03:18:33Z",
+  "updated_at": "2026-11-28T04:54:04Z",
   "reference_symbol": "^GSPC",
   "reference_date": "2026-11-27",
   "indices": {
@@ -13,9 +13,9 @@
     "^DJI": {
       "name": "다우지수",
       "date": "2026-11-27",
-      "close": 50774.9414,
+      "close": 50774.8984,
       "prev_close": 50182.9492,
-      "pct_change": 1.1797
+      "pct_change": 1.1796
     },
     "^IXIC": {
       "name": "나스닥종합지수",
